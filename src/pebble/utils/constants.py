@@ -74,14 +74,22 @@ DICTIONARY: Final[Literal["dictionary"]] = "dictionary"
 
 # Filter pattern
 FILTER_PATTERN: Final[re.Pattern] = re.compile(
-    flags=re.VERBOSE,
-    pattern=r"""
-    (?P<table>\w+)\.                  # table name
-    (?P<field>\w+)\.                 # field (column) name
-    (?P<scope>\*|\w+)\.               # scope (most '*')
-    (?P<operator>==|!=|>|<|>=|<=)\.   # operator
-    (?P<value>".*?"|\d+|\w+)          # value (string, number, identifier)
+    r"""
+    ^\s*
+    (?P<table>[A-Za-z_]\w*)\.
+    (?P<field>\*|[A-Za-z_]\w*)\.
+    (?P<scope>\*|ALL|ANY|NONE)\.
+    (?P<operator>
+        ==|!=|>=|<=|>|<|in|not\s+in|is|is\s+not
+    )\.
+    (?P<value>
+        "(?:\\.|[^"])*"      |   # doppelt-quotiert mit Escapes
+        '(?:\\.|[^'])*'      |   # einfach-quotiert mit Escapes
+        [^.]+                    # unquotiert: alles bis zum nächsten Punkt (hier letztes Segment)
+    )
+    \s*$
     """,
+    re.VERBOSE | re.IGNORECASE,
 )
 
 # Float type

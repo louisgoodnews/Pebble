@@ -18,7 +18,7 @@ from uuid import UUID
 
 from utils.exceptions import (
     PebbleFileNotCreatedError,
-    PebbleFileNoDeletedError,
+    PebbleFileNotDeletedError,
     PebbleFileNotFoundException,
     PebbleFileReadError,
     PebbleFileWriteError,
@@ -43,6 +43,7 @@ __all__: Final[List[str]] = [
     "is_list",
     "is_path",
     "is_set",
+    "is_string_quoted",
     "is_time",
     "is_tuple",
     "is_uuid",
@@ -51,8 +52,10 @@ __all__: Final[List[str]] = [
     "loop",
     "match_pattern",
     "object_to_string",
+    "path_exists",
     "path_to_string",
     "PebbleFieldTypes",
+    "quote_string",
     "read_file",
     "run_asynchronously",
     "string_to_date",
@@ -64,6 +67,7 @@ __all__: Final[List[str]] = [
     "string_to_time",
     "string_to_uuid",
     "time_to_string",
+    "unquote_string",
     "uuid_to_string",
     "write_file",
 ]
@@ -126,12 +130,14 @@ LOCK: Optional[asyncio.Lock] = None
 LOOP: Optional[asyncio.AbstractEventLoop] = None
 
 
-def convert_to_path(path: Optional[Union[Path, str]] = None) -> Path:
+def convert_to_path(
+    path: Optional[Union[list[str], Path, set[str], str, tuple[str]]] = None,
+) -> Path:
     """
     Convert a path to a Path object.
 
     Args:
-        path (Union[Path, str]): The path to convert.
+        path (Union[list[str], Path, set[str], str, tuple[str]]): The path to convert.
 
     Returns:
         Path: The Path object.
@@ -142,10 +148,23 @@ def convert_to_path(path: Optional[Union[Path, str]] = None) -> Path:
         # Return the current working directory
         return cwd()
 
-    # Check if the path is not a Path object
-    if not isinstance(path, Path):
+    # Check if the path is a Path object
+    if isinstance(
+        path,
+        Path,
+    ):
+        # Return the path
+        return path
+
+    # Check if the path is a list
+    if isinstance(
+        path,
+        (list, set, tuple),
+    ):
+        path = Path("/".join(path))
+    else:
         # Convert the path to a Path object
-        return Path(path)
+        path = Path(path)
 
     # Return the path
     return path
@@ -286,7 +305,7 @@ def delete_file(path: Path) -> bool:
         return False
     except Exception as e:
         # Re-raise the exception with a custom message
-        raise PebbleFileNoDeletedError(path=path) from e
+        raise PebbleFileNotDeletedError(path=path) from e
 
 
 def dict_to_json(
@@ -757,6 +776,26 @@ def is_set(string: str) -> bool:
         return False
 
 
+def is_string_quoted(string: str) -> bool:
+    """
+    Check if a string is quoted.
+
+    Args:
+        string (str): The string to check.
+
+    Returns:
+        bool: True if the string is quoted, False otherwise.
+    """
+
+    # Check if the string is in quotes
+    return (
+        string.startswith("'")
+        and string.endswith("'")
+        or string.startswith('"')
+        and string.endswith('"')
+    )
+
+
 def is_time(string: str) -> bool:
     """
     Check if a string is a time.
@@ -924,6 +963,33 @@ def object_to_string(
     return str(value)
 
 
+def path_exists(path: Union[list[str], Path, str]) -> bool:
+    """
+    Check if a path exists.
+
+    Args:
+        path (Union[list[str], Path, str]): The path to check.
+
+    Returns:
+        bool: True if the path exists, False otherwise.
+    """
+
+    # Check if the path is a string or Path object
+    if not isinstance(
+        path,
+        Path,
+    ):
+        # Convert the string to a Path object
+        path = Path(path)
+
+    try:
+        # Return True if the path exists
+        return path.resolve().exists()
+    except FileNotFoundError:
+        # Return False if the path does not exist
+        return False
+
+
 def path_to_string(value: Path) -> str:
     """
     Convert a Path to a string.
@@ -936,6 +1002,26 @@ def path_to_string(value: Path) -> str:
     """
 
     return value.as_posix()
+
+
+def quote_string(string: str) -> str:
+    """
+    Quote a string.
+
+    Args:
+        string (str): The string to quote.
+
+    Returns:
+        str: The quoted string.
+    """
+
+    # Check if the string is already quoted
+    if is_string_quoted(string):
+        # Return the string as is
+        return string
+
+    # Return the quoted string
+    return f"'{string}'"
 
 
 async def read_file(
@@ -964,7 +1050,7 @@ async def read_file(
     # Check if the file exists
     if not path.exists():
         # Raise a PebbleFileNotFoundException if the file does not exist
-        raise PebbleFileNotFoundException(file=path)
+        raise PebbleFileNotFoundException(path=path)
 
     try:
         # Acquire a lock to ensure thread safety
@@ -982,7 +1068,7 @@ async def read_file(
                 return content or ""
     except Exception as e:
         # Re-raise the exception with a custom message
-        raise PebbleFileReadError(file=path) from e
+        raise PebbleFileReadError(path=path) from e
 
 
 def run_asynchronously(
@@ -1117,6 +1203,14 @@ def string_to_object(
         Any: The object representation of the string.
     """
 
+    # Check if the string is not a string
+    if not isinstance(
+        string,
+        str,
+    ):
+        # Return the string as is
+        return string
+
     # Check if the handler is not None
     if handler is not None:
         # Call the handler
@@ -1250,6 +1344,34 @@ def time_to_string(
 
     # Return the formatted time
     return value.strftime(format)
+
+
+def unquote_string(string: str) -> str:
+    """
+    Remove the quotes from a string.
+
+    Args:
+        string (str): The string to remove the quotes from.
+
+    Returns:
+        str: The string with the quotes removed.
+    """
+
+    # Check if the string is not a string
+    if not isinstance(
+        string,
+        str,
+    ):
+        # Return the string as is
+        return string
+
+    # Check if the string is in quotes
+    if is_string_quoted(string):
+        # Remove the quotes from the string
+        return string[1:-1]
+
+    # Return the string as is
+    return string
 
 
 def uuid_to_string(value: UUID) -> str:

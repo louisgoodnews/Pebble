@@ -34,8 +34,10 @@ from utils.constants import (
 from utils.exceptions import (
     PebbleFieldValidationError,
     PebbleFileWriteError,
+    PebbleFilterEngineNotInitializedError,
     PebbleFilterStringFormatError,
     PebbleQueryStringFormatError,
+    PebbleQueryEngineNotInitializedError,
     PebbleRecordImmutabilityViolationError,
     PebbleSizeExceededError,
     PebbleTableAlreadyRegisteredError,
@@ -44,6 +46,7 @@ from utils.exceptions import (
 from utils.utils import (
     convert_to_path,
     create_file,
+    cwd,
     delete_file,
     dict_to_json,
     find_all_patterns,
@@ -51,10 +54,12 @@ from utils.utils import (
     json_to_dict,
     match_pattern,
     object_to_string,
+    path_exists,
     PebbleFieldTypes,
     read_file,
     run_asynchronously,
     string_to_object,
+    unquote_string,
     write_file,
 )
 
@@ -1544,7 +1549,7 @@ class PebbleFilterString:
         )
 
         # Check if the field is present
-        if not entry_value:
+        if entry_value is None:
             # Return False if the field is not present
             return False
 
@@ -1565,19 +1570,21 @@ class PebbleFilterString:
         # Get the value
         value: Any = self._value
 
-        # Convert to lowercase if the flag is CASE_INSENSITIVE
-        if self._flag == "CASE_INSENSITIVE":
-            # Convert entry_value to lowercase if it is a string
-            entry_value = entry_value.lower()
+        # Convert to lowercase if the flag is CASE_INSENSITIVE and the values are strings
+        if isinstance(entry_value, str) and isinstance(value, str):
+            # Convert to lowercase if the flag is CASE_INSENSITIVE
+            if self._flag == "CASE_INSENSITIVE":
+                # Convert entry_value to lowercase if it is a string
+                entry_value = entry_value.lower()
 
-            # Convert value to lowercase if it is a string
-            value = value.lower()
+                # Convert value to lowercase if it is a string
+                value = value.lower()
 
         # Comparison logic
-        if operator == "==":
+        if operator in {"==", "is"}:
             # Return True if the values are equal
             return entry_value == value
-        elif operator == "!=":
+        elif operator in {"!=", "is not"}:
             # Return True if the values are not equal
             return entry_value != value
         elif operator == "<":
@@ -1593,17 +1600,31 @@ class PebbleFilterString:
             # Return True if the entry value is greater than or equal to the value
             return entry_value >= value
         elif operator == "in":
-            # Return True if the entry value is in the value
-            return entry_value in value
+            try:
+                # Check if the entry value is a string and the value is a string
+                if isinstance(entry_value, str) and isinstance(value, str):
+                    # Return True if the value is in the entry value
+                    return value in entry_value
+                # Check if the entry value is a list, set, tuple or dict
+                if isinstance(entry_value, (list, set, tuple, dict)):
+                    # Return True if the value is in the entry value
+                    return value in entry_value
+                return False
+            except TypeError:
+                return False
         elif operator == "not in":
-            # Return True if the entry value is not in the value
-            return entry_value not in value
-        elif operator == "is":
-            # Return True if the entry value is the value
-            return entry_value is value
-        elif operator == "is not":
-            # Return True if the entry value is not the value
-            return entry_value is not value
+            try:
+                # Check if the entry value is a string and the value is a string
+                if isinstance(entry_value, str) and isinstance(value, str):
+                    # Return True if the value is not in the entry value
+                    return value not in entry_value
+                # Check if the entry value is a list, set, tuple or dict
+                if isinstance(entry_value, (list, set, tuple, dict)):
+                    # Return True if the value is not in the entry value
+                    return value not in entry_value
+                return True
+            except TypeError:
+                return True
 
         # Unknown operator
         raise ValueError(f"Unsupported operator: {self._operator}")
@@ -1643,6 +1664,14 @@ class PebbleFilterString:
                 f"_{key}",
                 string_to_object(string=value),
             )
+
+        # Remove the quotes if the value is a string
+        if self._value is not None and isinstance(
+            self._value,
+            str,
+        ):
+            # Remove the quotes from the value
+            self._value = unquote_string(string=self._value)
 
         # Set the parsed state of the filter to True
         self._parsed = True
@@ -1787,7 +1816,7 @@ class PebbleFilterEngine:
     @table.setter
     def table(
         self,
-        value: Union[dict[str, Any], PebbleTable],
+        value: Union[dict[str, Any], "PebbleTable"],
     ) -> None:
         """
         Set the table of the engine.
@@ -2033,6 +2062,9 @@ class PebbleTable:
         # Store the passed definition in an instance variable
         self._definition: dict[str, Any] = definition
 
+        # Store the passed engine in an instance variable
+        self._engine: Optional[PebbleFilterEngine] = None
+
         # Check if the entries is None
         if entries is None:
             # Initialize an empty entries
@@ -2072,12 +2104,12 @@ class PebbleTable:
         self._name: str = name
 
         # Check if the path is a string
-        if path is not None or not isinstance(
+        if path is None or not isinstance(
             path,
             Path,
         ):
             # Convert the string to a Path object
-            path = Path(path)
+            path = convert_to_path(path=path)
 
         # Store the passed path in an instance variable
         self._path: Path = path
@@ -2288,6 +2320,17 @@ class PebbleTable:
         return list(self._required)
 
     @property
+    def total(self) -> int:
+        """
+        Get the total number of entries in the table.
+
+        Returns:
+            int: The total number of entries in the table.
+        """
+
+        return self._entries.get("total", 0)
+
+    @property
     def unique(self) -> list[str]:
         """
         Get the unique constraints of the table.
@@ -2297,6 +2340,17 @@ class PebbleTable:
         """
 
         return list(self._unique)
+
+    @property
+    def values(self) -> dict[str, Any]:
+        """
+        Get the values of the table.
+
+        Returns:
+            dict[str, Any]: The values of the table.
+        """
+
+        return dict(self._entries.get("values", {}))
 
     def __contains__(
         self,
@@ -2313,7 +2367,7 @@ class PebbleTable:
         """
 
         # Check if the key is in the dictionary
-        return key in [values for values in self._entries["values"].values()]
+        return key in [values for values in self.values.values()]
 
     def __eq__(
         self,
@@ -2421,7 +2475,7 @@ class PebbleTable:
         """
 
         # Get a copy of the table's entries
-        result: dict[str, Any] = dict(self._entries["values"])
+        result: dict[str, Any] = dict(self.values)
 
         # Check if the format is dict
         if format == "dict":
@@ -2442,6 +2496,76 @@ class PebbleTable:
 
         # Unknown format
         raise ValueError(f"Unsupported format: {format}")
+
+    def bulk_remove(
+        self,
+        identifiers: list[int],
+    ) -> bool:
+        """
+        Delete multiple entries from the table.
+
+        Args:
+            identifiers (list[int]): The identifiers of the entries to delete.
+
+        Returns:
+            bool: True if all entries were deleted, False otherwise.
+        """
+
+        # Initialize an empty list of identifiers
+        result: list[bool] = []
+
+        # Iterate over the identifiers
+        for identifier in identifiers:
+            # Delete the entry
+            result.append(self.remove(identifier=identifier))
+
+        # Return the identifiers of the entries
+        return all(result)
+
+    def bulk_set(
+        self,
+        entries: list[dict[str, Any]],
+        identifiers: Optional[list[int]] = None,
+    ) -> list[int]:
+        """
+        Set multiple entries in the table.
+
+        Args:
+            entries (list[dict[str, Any]]): The entries to set.
+            identifiers (list[int]): The identifiers of the entries.
+
+        Returns:
+            list[int]: The identifiers of the entries.
+        """
+
+        # Initialize an empty list of identifiers
+        result: list[int] = []
+
+        # Check if the identifiers are None
+        if identifiers is None:
+            # Set the identifiers to the length of the entries
+            identifiers = [None for _ in range(len(entries))]
+
+        # Iterate over the entries
+        for (
+            entry,
+            identifier,
+        ) in zip(
+            *[
+                entries,
+                identifiers,
+            ]
+        ):
+            # Set the entry
+            result.append(
+                self.set(
+                    entry=entry,
+                    identifier=identifier,
+                )
+            )
+
+        # Return the identifiers of the entries
+        return result
 
     def check_for_size(self) -> bool:
         """
@@ -2553,6 +2677,41 @@ class PebbleTable:
 
         return not self.has_entries()
 
+    def engine(self) -> PebbleFilterEngine:
+        """
+        Get the filter engine.
+
+        Returns:
+            The filter engine.
+        """
+
+        # Check if the engine is None
+        if self._engine is None:
+            # Initialize the engine with this table
+            self._engine = PebbleFilterEngine(table=self)
+
+        # Return the engine
+        return self._engine
+
+    def filter(self) -> dict[str, Any]:
+        """
+        Filter the table.
+
+        Returns:
+            The filtered table.
+
+        Raises:
+            PebbleFilterEngineNotInitializedError: If the filter engine is not initialized.
+        """
+
+        # Check if the engine is None
+        if self._engine is None:
+            # Raise a PebbleFilterEngineNotInitializedError if the engine is None
+            raise PebbleFilterEngineNotInitializedError("The filter engine is not initialized.")
+
+        # Return the filtered table
+        return self._engine.filter()
+
     @classmethod
     def from_file(
         cls,
@@ -2637,8 +2796,8 @@ class PebbleTable:
             The item.
         """
 
-        return self._entries.get(
-            identifier,
+        return self.values.get(
+            str(identifier),
             None,
         )
 
@@ -2658,8 +2817,8 @@ class PebbleTable:
 
         # Return the items
         return {
-            identifier: self._entries.get(
-                identifier,
+            identifier: self.values.get(
+                str(identifier),
                 None,
             )
             for identifier in identifiers
@@ -2674,7 +2833,7 @@ class PebbleTable:
         """
 
         # Return the size of the table
-        return self._entries["total"]
+        return self.total
 
     def has_definition(self) -> bool:
         """
@@ -2684,7 +2843,7 @@ class PebbleTable:
             bool: True if the table has a definition, False otherwise.
         """
 
-        return len(self._definition) != 0
+        return len(self.definition) != 0
 
     def has_entries(self) -> bool:
         """
@@ -2694,7 +2853,7 @@ class PebbleTable:
             bool: True if the table has entries, False otherwise.
         """
 
-        return len(self._entries) != 0
+        return self.total != 0
 
     def has_primary_key(self) -> bool:
         """
@@ -2704,7 +2863,7 @@ class PebbleTable:
             bool: True if the table has a primary key, False otherwise.
         """
 
-        return len(self._primary_key) != 0
+        return len(self.primary_key) != 0
 
     def has_references(self) -> bool:
         """
@@ -2714,7 +2873,7 @@ class PebbleTable:
             bool: True if the table has references, False otherwise.
         """
 
-        return len(self._references) != 0
+        return len(self.references) != 0
 
     def has_requireds(self) -> bool:
         """
@@ -2724,7 +2883,7 @@ class PebbleTable:
             bool: True if the table has required fields, False otherwise.
         """
 
-        return len(self._required) != 0
+        return len(self.required) != 0
 
     def has_uniques(self) -> bool:
         """
@@ -2734,7 +2893,7 @@ class PebbleTable:
             bool: True if the table has unique fields, False otherwise.
         """
 
-        return len(self._unique) != 0
+        return len(self.unique) != 0
 
     def remove(
         self,
@@ -2744,10 +2903,10 @@ class PebbleTable:
         Delete an entry from the table.
 
         Args:
-            identifier: The identifier of the entry to delete.
+            identifier (Union[int, str]): The identifier of the entry to delete.
 
         Returns:
-            True if the entry was deleted, False otherwise.
+            bool: True if the entry was deleted, False otherwise.
         """
 
         # Check if the identifier is an integer
@@ -2759,12 +2918,12 @@ class PebbleTable:
             identifier = str(identifier)
 
         # Check if the identifier exists
-        if identifier not in self._entries["values"]:
+        if identifier not in self.values:
             # Return False if the identifier does not exist
             return False
 
         # Delete the identifier
-        self._entries["values"].pop(identifier)
+        self.values.pop(identifier)
 
         # Return True if the identifier was deleted
         return True
@@ -2778,43 +2937,121 @@ class PebbleTable:
         Set an item in the table.
 
         Args:
-            entry: The entry to set.
-            identifier: The identifier of the entry.
+            entry (dict[str, Any]): The entry to set.
+            identifier (Optional[str]): The identifier of the entry.
 
         Returns:
-            The identifier of the entry.
+            int: The identifier of the entry.
         """
 
         # Check if the total is in the dictionary
-        if "total" not in self._entries:
+        if "total" not in self.entries:
             # Set the total to 0
-            self._entries["total"] = 0
+            self.entries["total"] = 0
 
         # Check if the values is in the dictionary
-        if "values" not in self._entries:
+        if "values" not in self.entries:
             # Set the values to an empty dictionary
-            self._entries["values"] = {}
+            self.entries["values"] = {}
 
         # Check if the identifier is None
         if identifier is None:
             # Generate a new identifier
-            identifier = str(len(self._entries["values"]))
+            identifier = str(len(self.entries["values"]))
 
             # Increment the total
-            self._entries["total"] += 1
+            self.entries["total"] += 1
 
         # Set the entry in the dictionary
-        self._entries["values"][identifier] = entry
+        self.entries["values"][identifier] = entry
 
         # Return the identifier of the entry
         return identifier
+
+    def set_filter(
+        self,
+        string: str,
+        flag: Literal[
+            "ALL",
+            "ANY",
+            "NONE",
+        ] = "ALL",
+    ) -> Self:
+        """
+        Set a filter for the table.
+
+        Args:
+            flag (Literal["ALL", "ANY", "NONE"]): The flag to use for the filter.
+            string (str): The string to filter the table by.
+
+        Returns:
+            Self: The table.
+
+        Raises:
+            PebbleFilterEngineNotInitializedError: If the filter engine is not initialized.
+        """
+
+        # Check if the engine is None
+        if not self._engine:
+            # Initialize the engine
+            raise PebbleFilterEngineNotInitializedError("The filter engine is not initialized.")
+
+        # Set the filter
+        self._engine.set_filter(
+            filter=PebbleFilterString(
+                flag=flag,
+                string=string,
+            )
+        )
+
+        # Return the table
+        return self
+
+    def set_filters(
+        self,
+        strings: list[str],
+        flag: Literal[
+            "ALL",
+            "ANY",
+            "NONE",
+        ] = "ALL",
+    ) -> Self:
+        """
+        Set filters for the table.
+
+        Args:
+            flag (Literal["ALL", "ANY", "NONE"]): The flag to use for the filters.
+            strings (list[str]): The strings to filter the table by.
+
+        Returns:
+            Self: The table.
+        """
+
+        # Check if the engine is None
+        if not self._engine:
+            # Initialize the engine
+            raise PebbleFilterEngineNotInitializedError("The filter engine is not initialized.")
+
+        # Set the filters
+        self._engine.set_filters(
+            filters=[
+                PebbleFilterString(
+                    flag=flag,
+                    string=string,
+                )
+                for string in strings
+            ]
+        )
+
+        # Return the table
+        return self
 
     def to_dict(self) -> dict[str, Any]:
         """
         Convert the table to a dictionary.
 
         Returns:
-            The table as a dictionary.
+            dict[str, Any]: The table as a dictionary.
         """
 
         # Return the table as a dictionary
@@ -2827,7 +3064,10 @@ class PebbleTable:
                 "references": self._references,
                 "unique": self._unique,
             },
-            "entries": self._entries,
+            "entries": {
+                "total": self.total,
+                "values": self.values,
+            },
             "identifier": self._identifier,
             "name": self._name,
             "path": self._path,
@@ -2838,7 +3078,7 @@ class PebbleTable:
         Convert the table to a JSON string.
 
         Returns:
-            The table as a JSON string.
+            str: The table as a JSON string.
         """
 
         # Return the table as a JSON string
@@ -2849,11 +3089,11 @@ class PebbleTable:
         Convert the table to a string.
 
         Returns:
-            The table as a string.
+            str: The table as a string.
         """
 
         # Return the table as a string
-        return str(self._entries)
+        return str(self.entries)
 
 
 class PebbleTableFactory:
@@ -3769,21 +4009,31 @@ class PebbleQueryEngine:
         # Initialize the filters list as an instance variable
         self._filters: list[PebbleQueryString] = []
 
-    def query(self) -> list[dict[str, Any]]:
+    def query(self) -> dict[str, Any]:
         """
         Return the query results.
 
         Returns:
-            list[dict[str, Any]]: The query results.
+            dict[str, Any]: The query results.
         """
 
         # Initialize an empty list
-        results: list[dict[str, Any]] = []
+        results: dict[str, Any] = {
+            "query": "",
+            "total": 0,
+            "values": {},
+        }
 
         # Iterate over the filters
-        for filter in self._filters:
+        for (
+            index,
+            filter,
+        ) in enumerate(iterable=self._filters):
+            # Set the query
+            results["query"] += f"{filter.to_str()}" if index == 0 else f" {filter.to_str()}"
+
             # Evaluate the filter
-            results.extend(filter.evaluate(table=self._database))
+            results["values"][str(index)] = filter.evaluate(table=self._database)
 
         # Return the results
         return results
@@ -3892,16 +4142,8 @@ class PebbleDatabase:
             None
         """
 
-        # Check if the tables is None
-        if tables is None:
-            # Initialize an empty dictionary
-            tables = {
-                "total": 0,
-                "values": {},
-            }
-
-        # Store the passed dictionary in an instance variable
-        self._tables: dict[str, Any] = tables
+        # Initialize a new PebbleQueryEngine object
+        self._engine: Optional[PebbleQueryEngine] = None
 
         # Check if the identifier is None
         if identifier is None:
@@ -3915,15 +4157,26 @@ class PebbleDatabase:
         self._name: str = name
 
         # Check if the path is a string
-        if path is not None or not isinstance(
+        if path is None or not isinstance(
             path,
             Path,
         ):
             # Convert the string to a Path object
-            path = Path(path or ".")
+            path = convert_to_path(path=path)
 
         # Store the passed path in an instance variable
         self._path: Path = path
+
+        # Check if the tables is None
+        if tables is None:
+            # Initialize an empty dictionary
+            tables = {
+                "total": 0,
+                "values": {},
+            }
+
+        # Store the passed dictionary in an instance variable
+        self._tables: dict[str, Any] = tables
 
     @property
     def identifier(self) -> str:
@@ -4271,6 +4524,22 @@ class PebbleDatabase:
         # Delete the database object
         del self
 
+    def engine(self) -> Self:
+        """
+        Return the engine.
+
+        Returns:
+            Self: The Database object.
+        """
+
+        # Check if the engine is None
+        if self._engine is None:
+            # Initialize a new PebbleQueryEngine object
+            self._engine = PebbleQueryEngine(database=self)
+
+        # Return the database object
+        return self
+
     @classmethod
     def from_file(
         cls,
@@ -4351,6 +4620,25 @@ class PebbleDatabase:
         # Return the size of the database
         return self._tables["total"]
 
+    def query(self) -> dict[str, Any]:
+        """
+        Return the query.
+
+        Returns:
+            dict[str, Any]: The query.
+
+        Raises:
+            PebbleQueryEngineNotInitializedError: If the query engine is not initialized.
+        """
+
+        # Check if the engine is None
+        if not self._engine:
+            # Raise a PebbleQueryEngineNotInitializedError if the engine is None
+            raise PebbleQueryEngineNotInitializedError("The query engine is not initialized.")
+
+        # Return the query
+        return self._engine.query()
+
     def remove_table(
         self,
         table: PebbleTable,
@@ -4391,6 +4679,76 @@ class PebbleDatabase:
 
             # Break the loop
             break
+
+    def set_query(
+        self,
+        string: str,
+        scope: Literal["ALL", "ANY", "NONE"] = "ALL",
+        flag: Literal["CASE_INSENSITIVE", "CASE_SENSITIVE"] = "CASE_INSENSITIVE",
+    ) -> Self:
+        """
+        Set the query.
+
+        Args:
+            flag (Literal["CASE_INSENSITIVE", "CASE_SENSITIVE"]: The flag to use.
+            scope (Literal["ALL", "ANY", "NONE"]: The scope to use.
+            string (str): The string to set the query from.
+
+        Returns:
+            Self: The database object.
+        """
+
+        # Check if the engine is None
+        if self._engine is None:
+            # Raise a PebbleQueryEngineNotInitializedError if the engine is None
+            raise PebbleQueryEngineNotInitializedError(
+                message="The query engine is not initialized."
+            )
+
+        # Set the query
+        self._engine.set_query(
+            flag=flag,
+            scope=scope,
+            string=string,
+        )
+
+        # Return the database object
+        return self
+
+    def set_queries(
+        self,
+        strings: list[str],
+        scope: Literal["ALL", "ANY", "NONE"] = "ALL",
+        flag: Literal["CASE_INSENSITIVE", "CASE_SENSITIVE"] = "CASE_INSENSITIVE",
+    ) -> Self:
+        """
+        Set the queries.
+
+        Args:
+            flag (Literal["CASE_INSENSITIVE", "CASE_SENSITIVE"]: The flag to use.
+            scope (Literal["ALL", "ANY", "NONE"]: The scope to use.
+            strings (list[str]): The strings to set the queries from.
+
+        Returns:
+            Self: The database object.
+        """
+
+        # Check if the engine is None
+        if self._engine is None:
+            # Raise a PebbleQueryEngineNotInitializedError if the engine is None
+            raise PebbleQueryEngineNotInitializedError(
+                message="The query engine is not initialized."
+            )
+
+        # Set the queries
+        self._engine.set_queries(
+            flag=flag,
+            scope=scope,
+            strings=strings,
+        )
+
+        # Return the database object
+        return self
 
     def table(
         self,
@@ -5432,21 +5790,37 @@ class Pebble:
             PebbleDatabase: The database.
         """
 
-        # Check if the path is a string
-        if path is not None or not isinstance(
-            path,
-            Path,
-        ):
-            # Convert the string to a Path object
-            path = Path(path or ".")
-
         # Check if the database exists
         if name in self._databases:
             # Return the database
             return self._databases[name]
 
-        # Create the database
-        database = PebbleDatabase.from_file(path=path)
+        # Check if the path is None
+        if path is None:
+            # Configure the path
+            path = Path(
+                cwd(),
+                f"{name}.json",
+            )
+
+        # Check if the path is a string
+        if not isinstance(
+            path,
+            Path,
+        ):
+            # Convert the path to a Path object
+            path = convert_to_path(path=path)
+
+        # Check if the path exists
+        if path_exists(path=path):
+            # Create the database
+            database = PebbleDatabase.from_file(path=path)
+        else:
+            # Create the database
+            database = PebbleDatabase(
+                name=name,
+                path=path,
+            )
 
         # Add the database to the dictionary
         self._databases[name] = database
@@ -5470,13 +5844,13 @@ class Pebble:
             PebbleTable: The table.
         """
 
-        # Check if the path is a string
-        if path is not None or not isinstance(
+        # Check if the path is None
+        if path is None or not isinstance(
             path,
             Path,
         ):
             # Convert the string to a Path object
-            path = Path(path or ".")
+            path = convert_to_path(path=path)
 
         # Check if the table exists
         if name in self._tables:
