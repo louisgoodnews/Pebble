@@ -1,0 +1,115 @@
+# NOTE: The PyPI name "pebble" is already used by another project.
+# If you plan to publish, consider a unique name like "pebble-datastore" or "pebble-mini-db".
+# For local/internal use, you can keep "pebble".
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pebble-datastore"
+version = "0.1.0"
+description = "A lightweight, file-based mini datastore for Python with immutable records, schemas, and a filter/query DSL."
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+license = { file = "LICENSE" }
+authors = [{ name = "Louis Goodnews" }]
+keywords = ["datastore", "mini-db", "immutable", "schema", "filter", "query", "json", "builder"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "License :: OSI Approved :: MIT License",
+  "Intended Audience :: Developers",
+  "Topic :: Database",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+  "aiofiles~=24.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.5",
+  "black>=24.0.0",
+  "mypy>=1.10.0",
+  "pytest>=8.0.0",
+  "pytest-cov>=5.0.0",
+  "build>=1.2.1",
+  "twine>=5.0.0",
+]
+docs = [
+  "sphinx>=7.0.0",
+  "furo>=2024.0.0",
+  "myst-parser>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/louisgoodnews/Pebble"
+Repository = "https://github.com/louisgoodnews/Pebble"
+Issues = "https://github.com/louisgoodnews/Pebble/issues"
+
+[project.scripts]
+pebble = "pebble.main:main"
+
+[tool.hatch.build]
+exclude = [
+  "/.git",
+  "/.github",
+  "/.venv",
+  "/venv",
+  "/.mypy_cache",
+  "/.ruff_cache",
+  "/.pytest_cache",
+  "/dist",
+  "/build",
+  "/.idea",
+  "/.vscode",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pebble"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/pebble/**",
+  "README.md",
+  "LICENSE",
+  "CONTRIBUTING.md",
+  "CODE_OF_CONDUCT.md",
+  "examples/**",
+  "docs/**",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra -q"
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src"]
+extend-exclude = ["build", "dist", "venv", ".venv"]
+lint.select = ["E", "F", "I", "UP", "B", "SIM"]
+lint.ignore = ["E501"]  # handled by black
+
+[tool.mypy]
+python_version = "3.13"
+packages = ["pebble"]
+mypy_path = "src"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
+no_implicit_optional = true
+strict_equality = true
+ignore_missing_imports = true
+show_error_codes = true
+pretty = true
