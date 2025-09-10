@@ -11,6 +11,7 @@ from core.core import (
     PebbleDatabase,
     PebbleDatabaseBuilder,
     PebbleField,
+    PebbleFieldBuilder,
     PebbleFieldFactory,
     PebbleFilterEngine,
     PebbleFilterString,
@@ -69,6 +70,7 @@ from utils.exceptions import (
     PebbleTableNotFoundError,
 )
 from utils.utils import (
+    convert_to_path,
     create_file,
     cwd,
     date_to_string,
@@ -130,6 +132,7 @@ __all__: Final[List[str]] = [
     "PebbleDatabaseBuilder",
     "PebbleError",
     "PebbleField",
+    "PebbleFieldBuilder",
     "PebbleFieldFactory",
     "PebbleFieldTypes",
     "PebbleFieldValidationError",
@@ -166,6 +169,7 @@ __all__: Final[List[str]] = [
     "TIME",
     "TUPLE",
     "UUID",
+    "convert_to_path",
     "create_file",
     "cwd",
     "date_to_string",

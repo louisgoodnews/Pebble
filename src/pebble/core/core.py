@@ -26,20 +26,15 @@ from typing import (
 from uuid import UUID
 
 from utils.constants import (
-    COMBINATORS,
     FILTER_PATTERN,
     OBJECT_SIZE_LIMIT,
-    OPERATORS,
     QUERY_PATTERN,
-    SCOPES,
 )
 
 from utils.exceptions import (
     PebbleFieldValidationError,
     PebbleFileWriteError,
     PebbleFilterStringFormatError,
-    PebbleFilterStringOperatorError,
-    PebbleFilterStringScopeError,
     PebbleQueryStringFormatError,
     PebbleRecordImmutabilityViolationError,
     PebbleSizeExceededError,
@@ -47,6 +42,7 @@ from utils.exceptions import (
     PebbleTableNotFoundError,
 )
 from utils.utils import (
+    convert_to_path,
     create_file,
     delete_file,
     dict_to_json,
@@ -69,6 +65,7 @@ __all__: Final[List[str]] = [
     "PebbleDatabase",
     "PebbleDatabaseBuilder",
     "PebbleField",
+    "PebbleFieldBuilder",
     "PebbleFieldFactory",
     "PebbleFilterString",
     "PebbleModel",
@@ -372,9 +369,7 @@ class PebbleField:
         # Check if the passed value is not the default
         elif self._default is not None and value != self._default:
             # Raise a PebbleFieldValidationError if the value is not the default
-            raise PebbleFieldValidationError(
-                f"The field {self._name} must be {self._default}."
-            )
+            raise PebbleFieldValidationError(f"The field {self._name} must be {self._default}.")
 
         # Return True if the value is valid
         return True
@@ -399,12 +394,6 @@ class PebbleField:
             handler=handler,
             value=value,
         )
-
-
-class PebbleConstraint:
-    """ """
-
-    pass
 
 
 class PebbleFieldFactory:
@@ -479,6 +468,267 @@ class PebbleFieldFactory:
             type_=PebbleFieldTypes[type_],
             validator=validator,
         )
+
+
+class PebbleFieldBuilder:
+    """
+    A builder class for creating PebbleField objects.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialize a new PebbleFieldBuilder object.
+
+        Returns:
+            None
+        """
+
+        # Store the configuration in an instance variable
+        self._configuration: dict[str, Any] = {}
+
+    @property
+    def configuration(self) -> dict[str, Any]:
+        """
+        Get the configuration.
+
+        Returns:
+            dict[str, Any]: The configuration.
+        """
+
+        return dict(self._configuration)
+
+    def __contains__(
+        self,
+        key: str,
+    ) -> bool:
+        """
+        Check if the configuration contains a key.
+
+        Args:
+            key (str): The key to check for.
+
+        Returns:
+            bool: True if the configuration contains the key, False otherwise.
+        """
+
+        # Return the presence of the key in the configuration
+        return key in self._configuration
+
+    def __eq__(
+        self,
+        other: "PebbleFieldBuilder",
+    ) -> bool:
+        """
+        Check if the builder is equal to another builder.
+
+        Args:
+            other (PebbleFieldBuilder): The other builder to compare to.
+
+        Returns:
+            bool: True if the builders are equal, False otherwise.
+        """
+
+        # Check if the other object is a PebbleFieldBuilder
+        if not isinstance(
+            other,
+            PebbleFieldBuilder,
+        ):
+            # Return False
+            return False
+
+        # Return the equality of the builders
+        return self._configuration == other._configuration
+
+    def __repr__(self) -> str:
+        """
+        Get the string representation of the builder.
+
+        Returns:
+            str: The string representation of the builder.
+        """
+
+        # Return the string representation of the builder
+        return f"PebbleFieldBuilder(configuration={self._configuration})"
+
+    def __str__(self) -> str:
+        """
+        Get the string representation of the builder.
+
+        Returns:
+            str: The string representation of the builder.
+        """
+
+        # Return the string representation of the builder
+        return str(self._configuration)
+
+    def build(self) -> PebbleField:
+        """
+        Build the field.
+
+        Returns:
+            PebbleField: The field.
+        """
+
+        # Create and return the field
+        return PebbleFieldFactory.create(**self._configuration)
+
+    def with_choices(
+        self,
+        value: Iterable[Any],
+    ) -> Self:
+        """
+        Set the choices.
+
+        Args:
+            value (Iterable[Any]): The choices to set.
+
+        Returns:
+            Self: The builder.
+        """
+
+        # Set the choices
+        self._configuration["choices"] = value
+
+        # Return the builder
+        return self
+
+    def with_default(
+        self,
+        value: Optional[Any] = None,
+    ) -> Self:
+        """
+        Set the default value.
+
+        Args:
+            value (Optional[Any]): The default value to set. Defaults to None.
+
+        Returns:
+            Self: The builder.
+        """
+
+        # Set the default value
+        self._configuration["default"] = value
+
+        # Return the builder
+        return self
+
+    def with_name(
+        self,
+        value: str,
+    ) -> Self:
+        """
+        Set the name.
+
+        Args:
+            value (str): The name to set.
+
+        Returns:
+            Self: The builder.
+        """
+
+        # Set the name
+        self._configuration["name"] = value
+
+        # Return the builder
+        return self
+
+    def with_required(
+        self,
+        value: bool = False,
+    ) -> Self:
+        """
+        Set the required flag.
+
+        Args:
+            value (bool): The required flag to set. Defaults to False.
+
+        Returns:
+            Self: The builder.
+        """
+
+        # Set the required flag
+        self._configuration["required"] = value
+
+        # Return the builder
+        return self
+
+    def with_type(
+        self,
+        value: Literal[
+            "BOOLEAN",
+            "DATE",
+            "DATETIME",
+            "DECIMAL",
+            "DICTIONARY",
+            "FLOAT",
+            "INTEGER",
+            "LIST",
+            "PATH",
+            "SET",
+            "STRING",
+            "TIME",
+            "TUPLE",
+            "UUID",
+        ],
+    ) -> Self:
+        """
+        Set the type.
+
+        Args:
+            value (Literal[
+                "BOOLEAN",
+                "DATE",
+                "DATETIME",
+                "DECIMAL",
+                "DICTIONARY",
+                "FLOAT",
+                "INTEGER",
+                "LIST",
+                "PATH",
+                "SET",
+                "STRING",
+                "TIME",
+                "TUPLE",
+                "UUID",
+                ]): The type to set.
+
+        Returns:
+            Self: The builder.
+        """
+
+        # Set the type
+        self._configuration["type_"] = value
+
+        # Return the builder
+        return self
+
+    def with_validator(
+        self,
+        value: Optional[Callable[[Any], bool]] = None,
+    ) -> Self:
+        """
+        Set the validator.
+
+        Args:
+            value (Optional[Callable[[Any], bool]]): The validator to set. Defaults to None.
+
+        Returns:
+            Self: The builder.
+        """
+
+        # Set the validator
+        self._configuration["validator"] = value
+
+        # Return the builder
+        return self
+
+
+class PebbleConstraint:
+    """
+    A constraint class for creating PebbleConstraint objects.
+    """
+
+    pass
 
 
 class PebbleRecord(Mapping):
@@ -1731,27 +1981,29 @@ class PebbleTable:
         entries: Optional[dict[str, Any]] = None,
         fields: Optional[dict[str, Any]] = None,
         identifier: Optional[str] = None,
-        indexes: Optional[dict[str, Any]] = None,
-        primary_key: Optional[dict[str, Any]] = None,
+        indexes: Optional[list[str]] = None,
+        primary_key: Optional[str] = None,
         references: Optional[dict[str, Any]] = None,
-        unique: Optional[dict[str, Any]] = None,
+        required: Optional[list[str]] = None,
+        unique: Optional[list[str]] = None,
         path: Optional[Union[Path, str]] = None,
     ) -> None:
         """
         Initialize a new PebbleTable object.
 
         Args:
-            constraints: The dictionary to store the constraints of the table.
-            definition: The dictionary to store the definition of the table.
-            entries: The dictionary to store the table data in.
-            fields: The dictionary to store the fields of the table.
-            identifier: The identifier of the table.
-            indexes: The dictionary to store the indexes of the table.
-            name: The name of the table.
-            path: The path to the table file.
-            primary_key: The dictionary to store the primary key of the table.
-            references: The dictionary to store the references of the table.
-            unique: The dictionary to store the unique constraints of the table.
+            constraints (Optional[dict[str, Any]]): The dictionary to store the constraints of the table.
+            definition (Optional[dict[str, Any]]): The dictionary to store the definition of the table.
+            entries (Optional[dict[str, Any]]): The dictionary to store the table data in.
+            fields (Optional[dict[str, Any]]): The dictionary to store the fields of the table.
+            identifier (Optional[str]): The identifier of the table.
+            indexes (Optional[list[str]]): The list to store the indexes of the table.
+            name (str): The name of the table.
+            path (Optional[Union[Path, str]]): The path to the table file.
+            primary_key (Optional[str]): The name of the primary key of the table.
+            references (Optional[dict[str, Any]]): The dictionary to store the references of the table.
+            required (Optional[list[str]]): The list of required fields.
+            unique (Optional[list[str]]): The list of unique fields.
 
         Returns:
             None
@@ -1768,7 +2020,15 @@ class PebbleTable:
         # Check if the definition is None
         if definition is None:
             # Initialize an empty definition
-            definition = {}
+            definition = {
+                "constraints": {},
+                "fields": {},
+                "indexes": [],
+                "primary_key": "",
+                "references": {},
+                "required": [],
+                "unique": [],
+            }
 
         # Store the passed definition in an instance variable
         self._definition: dict[str, Any] = definition
@@ -1803,10 +2063,10 @@ class PebbleTable:
         # Check if the indexes is None
         if indexes is None:
             # Initialize an empty indexes
-            indexes = {}
+            indexes = []
 
         # Store the passed indexes in an instance variable
-        self._indexes: dict[str, Any] = indexes
+        self._indexes: list[str] = indexes
 
         # Store the passed name string in an instance variable
         self._name: str = name
@@ -1825,10 +2085,10 @@ class PebbleTable:
         # Check if the primary_key is None
         if primary_key is None:
             # Initialize an empty primary_key
-            primary_key = {}
+            primary_key = ""
 
         # Store the passed primary_key in an instance variable
-        self._primary_key: dict[str, Any] = primary_key
+        self._primary_key: str = primary_key
 
         # Check if the references is None
         if references is None:
@@ -1838,13 +2098,21 @@ class PebbleTable:
         # Store the passed references in an instance variable
         self._references: dict[str, Any] = references
 
+        # Check if the required is None
+        if required is None:
+            # Initialize an empty required
+            required = []
+
+        # Store the passed required in an instance variable
+        self._required: list[str] = required
+
         # Check if the unique is None
         if unique is None:
             # Initialize an empty unique
-            unique = {}
+            unique = []
 
         # Store the passed unique in an instance variable
-        self._unique: dict[str, Any] = unique
+        self._unique: list[str] = unique
 
     @property
     def constraints(self) -> dict[str, Any]:
@@ -1872,6 +2140,7 @@ class PebbleTable:
             "indexes": self._indexes,
             "primary_key": self._primary_key,
             "references": self._references,
+            "required": self._required,
             "unique": self._unique,
         }
 
@@ -1909,15 +2178,15 @@ class PebbleTable:
         return self._identifier
 
     @property
-    def indexes(self) -> dict[str, Any]:
+    def indexes(self) -> list[str]:
         """
         Get the indexes of the table.
 
         Returns:
-            dict[str, Any]: The indexes of the table.
+            list[str]: The indexes of the table.
         """
 
-        return dict(self._indexes)
+        return list(self._indexes)
 
     @property
     def name(self) -> str:
@@ -1986,15 +2255,15 @@ class PebbleTable:
         self._path = value
 
     @property
-    def primary_key(self) -> dict[str, Any]:
+    def primary_key(self) -> str:
         """
         Get the primary key of the table.
 
         Returns:
-            dict[str, Any]: The primary key of the table.
+            str: The primary key of the table.
         """
 
-        return dict(self._primary_key)
+        return self._primary_key
 
     @property
     def references(self) -> dict[str, Any]:
@@ -2008,15 +2277,26 @@ class PebbleTable:
         return dict(self._references)
 
     @property
-    def unique(self) -> dict[str, Any]:
+    def required(self) -> list[str]:
+        """
+        Get the required fields of the table.
+
+        Returns:
+            list[str]: The required fields of the table.
+        """
+
+        return list(self._required)
+
+    @property
+    def unique(self) -> list[str]:
         """
         Get the unique constraints of the table.
 
         Returns:
-            dict[str, Any]: The unique constraints of the table.
+            list[str]: The unique constraints of the table.
         """
 
-        return dict(self._unique)
+        return list(self._unique)
 
     def __contains__(
         self,
@@ -2121,9 +2401,7 @@ class PebbleTable:
 
     def all(
         self, format: Literal["dict", "list", "set", "tuple"] = "dict"
-    ) -> Union[
-        dict[str, Any], list[dict[str, Any]], set[dict[str, Any]], tuple[dict[str, Any]]
-    ]:
+    ) -> Union[dict[str, Any], list[dict[str, Any]], set[dict[str, Any]], tuple[dict[str, Any]]]:
         """
         Get all the data in the table.
 
@@ -2262,6 +2540,19 @@ class PebbleTable:
         # Delete the table object
         del self
 
+    def empty(self) -> bool:
+        """
+        Check if the table is empty.
+
+        This method will check if the table is empty.
+        It is a convenience wrapper for the 'has_entries' method.
+
+        Returns:
+            bool: True if the table is empty, False otherwise.
+        """
+
+        return not self.has_entries()
+
     @classmethod
     def from_file(
         cls,
@@ -2384,6 +2675,66 @@ class PebbleTable:
 
         # Return the size of the table
         return self._entries["total"]
+
+    def has_definition(self) -> bool:
+        """
+        Check if the table has a definition.
+
+        Returns:
+            bool: True if the table has a definition, False otherwise.
+        """
+
+        return len(self._definition) != 0
+
+    def has_entries(self) -> bool:
+        """
+        Check if the table has entries.
+
+        Returns:
+            bool: True if the table has entries, False otherwise.
+        """
+
+        return len(self._entries) != 0
+
+    def has_primary_key(self) -> bool:
+        """
+        Check if the table has a primary key.
+
+        Returns:
+            bool: True if the table has a primary key, False otherwise.
+        """
+
+        return len(self._primary_key) != 0
+
+    def has_references(self) -> bool:
+        """
+        Check if the table has references.
+
+        Returns:
+            bool: True if the table has references, False otherwise.
+        """
+
+        return len(self._references) != 0
+
+    def has_requireds(self) -> bool:
+        """
+        Check if the table has required fields.
+
+        Returns:
+            bool: True if the table has required fields, False otherwise.
+        """
+
+        return len(self._required) != 0
+
+    def has_uniques(self) -> bool:
+        """
+        Check if the table has unique fields.
+
+        Returns:
+            bool: True if the table has unique fields, False otherwise.
+        """
+
+        return len(self._unique) != 0
 
     def remove(
         self,
@@ -2561,10 +2912,10 @@ class PebbleTableBuilder:
             "definition": {
                 "constraints": {},
                 "fields": {},
-                "indexes": {},
-                "primary_key": {},
+                "indexes": [],
+                "primary_key": "",
                 "references": {},
-                "unique": {},
+                "unique": [],
             },
             "entries": {
                 "total": 0,
@@ -2781,6 +3132,58 @@ class PebbleTableBuilder:
         # Return the builder
         return self
 
+    def with_index(
+        self,
+        value: str,
+    ) -> Self:
+        """
+        Set the index.
+
+        Args:
+            value (str): The index to set.
+
+        Returns:
+            Self: The builder.
+        """
+
+        # Check if the definition is not in the configuration
+        if "definition" not in self._configuration:
+            # Initialize the definition as a nested dictionary
+            self._configuration["definition"] = {"indexes": []}
+
+        # Set the index
+        self._configuration["definition"]["indexes"].append(value)
+
+        # Return the builder
+        return self
+
+    def with_indexes(
+        self,
+        value: list[str],
+    ) -> Self:
+        """
+        Set the indexes.
+
+        Args:
+            value (list[str]): The indexes to set.
+
+        Returns:
+            Self: The builder.
+        """
+
+        # Check if the definition is not in the configuration
+        if "definition" not in self._configuration:
+            # Initialize the definition as a nested dictionary
+            self._configuration["definition"] = {"indexes": []}
+
+        # Set the indexes
+        for index in value:
+            # Set the index
+            self._configuration["definition"]["indexes"].append(index)
+
+        # Return the builder
+        return self
+
     def with_name(
         self,
         value: str,
@@ -2846,7 +3249,7 @@ class PebbleTableBuilder:
         # Check if the definition is not in the configuration
         if "definition" not in self._configuration:
             # Initialize the definition as a nested dictionary
-            self._configuration["definition"] = {"primary_key": {}}
+            self._configuration["definition"] = {"primary_key": ""}
 
         # Set the primary key
         self._configuration["definition"]["primary_key"] = value
@@ -2871,13 +3274,13 @@ class PebbleTableBuilder:
         # Check if the definition is not in the configuration
         if "definition" not in self._configuration:
             # Initialize the definition as a nested dictionary
-            self._configuration["definition"] = {"reference": {}}
+            self._configuration["definition"] = {"references": {}}
 
         # Generate an identifier for the reference
-        identifier: str = str(len(self._configuration["definition"]["reference"]))
+        identifier: str = str(len(self._configuration["definition"]["references"]))
 
         # Set the reference
-        self._configuration["definition"]["reference"][identifier] = value
+        self._configuration["definition"]["references"][identifier] = value
 
         # Return the builder
         return self
@@ -2934,13 +3337,10 @@ class PebbleTableBuilder:
         # Check if the definition is not in the configuration
         if "definition" not in self._configuration:
             # Initialize the definition as a nested dictionary
-            self._configuration["definition"] = {"unique": {}}
-
-        # Generate an identifier for the unique key
-        identifier: str = str(len(self._configuration["definition"]["unique"]))
+            self._configuration["definition"] = {"unique": []}
 
         # Set the unique key
-        self._configuration["definition"]["unique"][identifier] = value
+        self._configuration["definition"]["unique"].append(value)
 
         # Return the builder
         return self
@@ -2962,20 +3362,17 @@ class PebbleTableBuilder:
         # Check if the definition is not in the configuration
         if "definition" not in self._configuration:
             # Initialize the definition as a nested dictionary
-            self._configuration["definition"] = {"unique": {}}
+            self._configuration["definition"] = {"unique": []}
 
         # Set the unique keys
         for key in value:
             # Check if the key already exists
-            if key in self._configuration["definition"]["unique"].values():
+            if key in self._configuration["definition"]["unique"]:
                 # Raise a ValueError
                 raise ValueError(f"Unique key '{key}' already exists")
 
-            # Generate an identifier for the unique key
-            identifier: str = str(len(self._configuration["definition"]["unique"]))
-
             # Set the unique key
-            self._configuration["definition"]["unique"][identifier] = key
+            self._configuration["definition"]["unique"].append(key)
 
         # Return the builder
         return self
@@ -3324,9 +3721,7 @@ class PebbleQueryString:
             list[list[str]]: The list representation of the string.
         """
 
-        return [
-            filter.to_list() for filter in [filter for filter in self._filters.values()]
-        ]
+        return [filter.to_list() for filter in [filter for filter in self._filters.values()]]
 
     def to_str(self) -> str:
         """
@@ -3346,10 +3741,7 @@ class PebbleQueryString:
             tuple[tuple[str]]: The tuple representation of the string.
         """
 
-        return tuple(
-            filter.to_tuple()
-            for filter in [filter for filter in self._filters.values()]
-        )
+        return tuple(filter.to_tuple() for filter in [filter for filter in self._filters.values()])
 
 
 class PebbleQueryEngine:
@@ -4801,9 +5193,7 @@ class PebbleToolBuilder:
             Self: The PebbleToolBuilder instance.
         """
 
-        raise NotImplementedError(
-            f"{self.__class__.__name__}.query() is not implemented yet."
-        )
+        raise NotImplementedError(f"{self.__class__.__name__}.query() is not implemented yet.")
 
     def set(
         self,
@@ -4945,7 +5335,7 @@ class Pebble:
 
     def empty(
         self,
-        databass: bool = False,
+        database: bool = False,
         tables: bool = False,
     ) -> bool:
         """
@@ -4954,7 +5344,7 @@ class Pebble:
         This method will check if the Pebble object is empty, i.e. if the databases and tables dictionaries are empty.
 
         Args:
-            databass (bool, optional): Whether to check the databases.
+            database (bool, optional): Whether to check the databases.
             tables (bool, optional): Whether to check the tables.
 
         Returns:
@@ -4965,7 +5355,7 @@ class Pebble:
         result: List[bool] = []
 
         # Check if the databases should be checked
-        if databass:
+        if database:
             # Check if the databases dictionary is empty
             result.append(len(self._databases) == 0)
 

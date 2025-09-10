@@ -26,6 +26,7 @@ from utils.exceptions import (
 
 
 __all__: Final[List[str]] = [
+    "convert_to_path",
     "create_file",
     "cwd",
     "date_to_string",
@@ -123,6 +124,31 @@ LOCK: Optional[asyncio.Lock] = None
 
 # Event loop for file operations
 LOOP: Optional[asyncio.AbstractEventLoop] = None
+
+
+def convert_to_path(path: Optional[Union[Path, str]] = None) -> Path:
+    """
+    Convert a path to a Path object.
+
+    Args:
+        path (Union[Path, str]): The path to convert.
+
+    Returns:
+        Path: The Path object.
+    """
+
+    # Check if the path is None
+    if path is None:
+        # Return the current working directory
+        return cwd()
+
+    # Check if the path is not a Path object
+    if not isinstance(path, Path):
+        # Convert the path to a Path object
+        return Path(path)
+
+    # Return the path
+    return path
 
 
 async def create_file(path: Path) -> bool:
