@@ -13,13 +13,15 @@ __all__: Final[List[str]] = [
     "PebbleError",
     "PebbleFieldValidationError",
     "PebbleFileNotCreatedError",
-    "PebbleFileNoDeletedError",
+    "PebbleFileNotDeletedError",
     "PebbleFileNotFoundException",
     "PebbleFileReadError",
     "PebbleFileWriteError",
+    "PebbleFilterEngineNotInitializedError",
     "PebbleFilterStringFormatError",
     "PebbleFilterStringOperatorError",
     "PebbleFilterStringScopeError",
+    "PebbleQueryEngineNotInitializedError",
     "PebbleQueryStringFormatError",
     "PebbleQueryStringOperatorError",
     "PebbleQueryStringScopeError",
@@ -67,7 +69,7 @@ class PebbleFileNotCreatedError(PebbleError):
         super().__init__(f"File at path '{path}' was not created.")
 
 
-class PebbleFileNoDeletedError(PebbleError):
+class PebbleFileNotDeletedError(PebbleError):
     """
     Custom exception class for when a file is not deleted.
     """
@@ -159,6 +161,12 @@ class PebbleFileWriteError(PebbleError):
         super().__init__(f"File at path '{path}' could not be written.")
 
 
+class PebbleFilterEngineNotInitializedError(PebbleError):
+    """
+    Custom exception class for when a filter engine is not initialized.
+    """
+
+
 class PebbleFilterStringOperatorError(PebbleError):
     """
     Custom exception class for when a filter string operator is not valid.
@@ -230,6 +238,12 @@ class PebbleFilterStringFormatError(PebbleError):
 
         # Call the parent class constructor
         super().__init__(f"Filter string '{string}' is not in the correct format.")
+
+
+class PebbleQueryEngineNotInitializedError(PebbleError):
+    """
+    Custom exception class for when a query engine is not initialized.
+    """
 
 
 class PebbleQueryStringOperatorError(PebbleError):
