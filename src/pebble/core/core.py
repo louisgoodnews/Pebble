@@ -3103,6 +3103,9 @@ class PebbleTable:
             None
         """
 
+        # Initialize the cache as an instance variable
+        self._cache: Final[PebbleCache] = PebbleCache()
+
         # Check if the constraints is None
         if constraints is None:
             # Initialize an empty constraints
@@ -3228,6 +3231,128 @@ class PebbleTable:
 
         # Register the flush method to be called on exit
         atexit.register(self._flush)
+
+    def __contains__(
+        self,
+        key: str,
+    ) -> bool:
+        """
+        Check if the table contains a key.
+
+        Args:
+            key: The key to check.
+
+        Returns:
+            True if the table contains the key, False otherwise.
+        """
+
+        # Check if the key is in the dictionary
+        return key in [values for values in self.values.values()]
+
+    def __eq__(
+        self,
+        other: object,
+    ) -> bool:
+        """
+        Check if the table is equal to another table.
+
+        Args:
+            other: The other table to compare with.
+
+        Returns:
+            True if the tables are equal, False otherwise.
+        """
+
+        # Check if the other object is a PebbleTable object
+        if not isinstance(
+            other,
+            PebbleTable,
+        ):
+            # Return False if the other object is not a PebbleTable object
+            return False
+
+        # Return True if the tables are equal
+        return self._identifier == other._identifier
+
+    def __getitem__(
+        self,
+        key: str,
+    ) -> Any:
+        """
+        Get an item from the table itself or its data.
+
+        This method is used to access the table object's data.
+        It can also be used to access the table object's instance variables.
+
+        Args:
+            key: The key of the item.
+
+        Returns:
+            The item.
+        """
+
+        # Return the value from the dictionary
+        return self._entries.get(key)
+
+    def __repr__(self) -> str:
+        """
+        Get a string representation of the table.
+
+        Returns:
+            A string representation of the table.
+        """
+
+        return f"<{self.__class__.__name__}(cache=[{self._cache}], definition=[{self._definition}], entries=[{self._entries['total']} {'entry' if self._entries['total'] == 1 else 'entries'}], identifier=[{self._identifier}], name=[{self._name}], path=[{self._path}])>"
+
+    def __setitem__(
+        self,
+        key: str,
+        value: Any,
+    ) -> None:
+        """
+        Set an item in the table itself or its data.
+
+        This method is used to set the table object's data.
+        It can also be used to set the table object's instance variables.
+
+        Args:
+            key: The key of the item.
+            value: The value of the item.
+
+        Returns:
+            None
+        """
+
+        # Check if the key is the identifier
+        if key == "identifier":
+            # Raise an AttributeError if the identifier is set
+            raise AttributeError(
+                f"Cannot set 'identifier' of a {self.__class__.__name__} object. As this attribute is immutable."
+            )
+
+        # Set the value in the dictionary
+        self._entries[key] = value
+
+    def __str__(self) -> str:
+        """
+        Get a string representation of the table.
+
+        Returns:
+            A string representation of the table.
+        """
+
+        return str(self._entries)
+
+    @property
+    def cache(self) -> PebbleCache:
+        """
+        Get the cache of the table.
+
+        Returns:
+            PebbleCache: The cache of the table.
+        """
+
+        return self._cache
 
     @property
     def constraints(self) -> dict[str, Any]:
@@ -3501,107 +3626,6 @@ class PebbleTable:
         """
 
         return dict(self._entries.get("values", {}))
-
-    def __contains__(
-        self,
-        key: str,
-    ) -> bool:
-        """
-        Check if the table contains a key.
-
-        Args:
-            key: The key to check.
-
-        Returns:
-            True if the table contains the key, False otherwise.
-        """
-
-        # Check if the key is in the dictionary
-        return key in [values for values in self.values.values()]
-
-    def __eq__(
-        self,
-        other: object,
-    ) -> bool:
-        """
-        Check if the table is equal to another table.
-
-        Args:
-            other: The other table to compare with.
-
-        Returns:
-            True if the tables are equal, False otherwise.
-        """
-
-        # Check if the other object is a PebbleTable object
-        if not isinstance(
-            other,
-            PebbleTable,
-        ):
-            # Return False if the other object is not a PebbleTable object
-            return False
-
-        # Return True if the tables are equal
-        return self._identifier == other._identifier
-
-    def __getitem__(
-        self,
-        key: str,
-    ) -> Any:
-        """
-        Get an item from the table itself or its data.
-
-        This method is used to access the table object's data.
-        It can also be used to access the table object's instance variables.
-
-        Args:
-            key: The key of the item.
-
-        Returns:
-            The item.
-        """
-
-        # Return the value from the dictionary
-        return self._entries.get(key)
-
-    def __repr__(self) -> str:
-        """
-        Get a string representation of the table.
-
-        Returns:
-            A string representation of the table.
-        """
-
-        return f"<{self.__class__.__name__}(definition=[{self._definition}], entries=[{self._entries['total']} {'entry' if self._entries['total'] == 1 else 'entries'}], identifier=[{self._identifier}], name=[{self._name}], path=[{self._path}])>"
-
-    def __setitem__(
-        self,
-        key: str,
-        value: Any,
-    ) -> None:
-        """
-        Set an item in the table itself or its data.
-
-        This method is used to set the table object's data.
-        It can also be used to set the table object's instance variables.
-
-        Args:
-            key: The key of the item.
-            value: The value of the item.
-
-        Returns:
-            None
-        """
-
-        # Check if the key is the identifier
-        if key == "identifier":
-            # Raise an AttributeError if the identifier is set
-            raise AttributeError(
-                f"Cannot set 'identifier' of a {self.__class__.__name__} object. As this attribute is immutable."
-            )
-
-        # Set the value in the dictionary
-        self._entries[key] = value
 
     def _auto_flush(self) -> None:
         """
@@ -5374,6 +5398,9 @@ class PebbleDatabase:
             None
         """
 
+        # Initialize the cache as an instance variable
+        self._cache: Final[PebbleCache] = PebbleCache()
+
         # Initialize the dirty flag as an instance variable
         self._dirty: bool = False
 
@@ -5427,6 +5454,127 @@ class PebbleDatabase:
 
         # Register the flush method to be called on exit
         atexit.register(self._flush)
+
+    def __contains__(
+        self,
+        key: str,
+    ) -> bool:
+        """
+        Check if the database contains a key.
+
+        Args:
+            key: The key to check.
+
+        Returns:
+            True if the database contains the key, False otherwise.
+        """
+
+        return key in [value["name"] for value in self._tables["values"].values()]
+
+    def __eq__(
+        self,
+        other: object,
+    ) -> bool:
+        """
+        Check if the database is equal to another database.
+
+        Args:
+            other: The other database to compare with.
+
+        Returns:
+            True if the databases are equal, False otherwise.
+        """
+
+        # Check if the other object is a PebbleDatabase object
+        if not isinstance(
+            other,
+            PebbleDatabase,
+        ):
+            # Return False if the other object is not a PebbleDatabase object
+            return False
+
+        # Return True if the databases are equal
+        return self._identifier == other._identifier
+
+    def __getitem__(
+        self,
+        key: str,
+    ) -> Any:
+        """
+        Get an item from the database itself or its data.
+
+        This method is used to access the database object's data.
+        It can also be used to access the database object's instance variables.
+
+        Args:
+            key: The key of the item.
+
+        Returns:
+            The item.
+        """
+
+        # Return the value from the dictionary
+        return self._tables["values"].get(key)
+
+    def __repr__(self) -> str:
+        """
+        Get a string representation of the database.
+
+        Returns:
+            A string representation of the database.
+        """
+
+        return f"<{self.__class__.__name__}(tables=[{self._tables['total']} {'table' if self._tables['total'] == 1 else 'tables'}], identifier=[{self._identifier}], name=[{self._name}], path=[{self._path}])>"
+
+    def __setitem__(
+        self,
+        key: str,
+        value: Any,
+    ) -> None:
+        """
+        Set an item in the database itself or its data.
+
+        This method is used to set the database object's data.
+        It can also be used to set the database object's instance variables.
+
+        Args:
+            key: The key of the item.
+            value: The value of the item.
+
+        Returns:
+            None
+        """
+
+        # Check if the key is the identifier
+        if key == "identifier":
+            # Raise an AttributeError if the identifier is set
+            raise AttributeError(
+                f"Cannot set 'identifier' of a {self.__class__.__name__} object. As this attribute is immutable."
+            )
+
+        # Set the value in the dictionary
+        self._tables[key] = value
+
+    def __str__(self) -> str:
+        """
+        Get a string representation of the database.
+
+        Returns:
+            A string representation of the database.
+        """
+
+        return str(self._tables)
+
+    @property
+    def cache(self) -> PebbleCache:
+        """
+        Get the cache of the database.
+
+        Returns:
+            PebbleCache: The cache of the database.
+        """
+
+        return self._cache
 
     @property
     def dirty(self) -> bool:
@@ -5582,106 +5730,6 @@ class PebbleDatabase:
         """
 
         return dict(self._tables)
-
-    def __contains__(
-        self,
-        key: str,
-    ) -> bool:
-        """
-        Check if the database contains a key.
-
-        Args:
-            key: The key to check.
-
-        Returns:
-            True if the database contains the key, False otherwise.
-        """
-
-        return key in [value["name"] for value in self._tables["values"].values()]
-
-    def __eq__(
-        self,
-        other: object,
-    ) -> bool:
-        """
-        Check if the database is equal to another database.
-
-        Args:
-            other: The other database to compare with.
-
-        Returns:
-            True if the databases are equal, False otherwise.
-        """
-
-        # Check if the other object is a PebbleDatabase object
-        if not isinstance(
-            other,
-            PebbleDatabase,
-        ):
-            # Return False if the other object is not a PebbleDatabase object
-            return False
-
-        # Return True if the databases are equal
-        return self._identifier == other._identifier
-
-    def __getitem__(
-        self,
-        key: str,
-    ) -> Any:
-        """
-        Get an item from the database itself or its data.
-
-        This method is used to access the database object's data.
-        It can also be used to access the database object's instance variables.
-
-        Args:
-            key: The key of the item.
-
-        Returns:
-            The item.
-        """
-
-        # Return the value from the dictionary
-        return self._tables["values"].get(key)
-
-    def __repr__(self) -> str:
-        """
-        Get a string representation of the database.
-
-        Returns:
-            A string representation of the database.
-        """
-
-        return f"<{self.__class__.__name__}(tables=[{self._tables['total']} {'table' if self._tables['total'] == 1 else 'tables'}], identifier=[{self._identifier}], name=[{self._name}], path=[{self._path}])>"
-
-    def __setitem__(
-        self,
-        key: str,
-        value: Any,
-    ) -> None:
-        """
-        Set an item in the database itself or its data.
-
-        This method is used to set the database object's data.
-        It can also be used to set the database object's instance variables.
-
-        Args:
-            key: The key of the item.
-            value: The value of the item.
-
-        Returns:
-            None
-        """
-
-        # Check if the key is the identifier
-        if key == "identifier":
-            # Raise an AttributeError if the identifier is set
-            raise AttributeError(
-                f"Cannot set 'identifier' of a {self.__class__.__name__} object. As this attribute is immutable."
-            )
-
-        # Set the value in the dictionary
-        self._tables[key] = value
 
     def _auto_flush(self) -> None:
         """
