@@ -3,6 +3,8 @@ Author: Louis Goodnews
 Date: 2025-09-05
 """
 
+import atexit
+import threading
 import uuid
 
 from collections.abc import KeysView, ItemsView, Mapping, ValuesView
@@ -51,6 +53,7 @@ from utils.utils import (
     delete_file,
     dict_to_json,
     find_all_patterns,
+    is_stale,
     is_uuid,
     json_to_dict,
     match_pattern,
@@ -65,6 +68,10 @@ from utils.utils import (
 
 __all__: Final[List[str]] = [
     "Pebble",
+    "PebbleCache",
+    "PebbleCacheEntry",
+    "PebbleCacheEntryFactory",
+    "PebbleCacheEntryBuilder",
     "PebbleConstraint",
     "PebbleDatabase",
     "PebbleDatabaseBuilder",
@@ -77,6 +84,1061 @@ __all__: Final[List[str]] = [
     "PebbleTool",
     "PebbleToolBuilder",
 ]
+
+
+class PebbleCacheEntry:
+    """
+    A class to represent a cache entry.
+    """
+
+    def __init__(
+        self,
+        data: dict[str, Any],
+    ) -> None:
+        """
+        Initialize a new PebbleCacheEntry object.
+
+        Args:
+            data (dict[str, Any]): The data to store in the cache entry.
+
+        Returns:
+            None
+        """
+
+        # Initialize the dirty flag in an instance variable
+        self._dirty: bool = False
+
+        # Store the passed data dict in an instance variable
+        self._data: dict[str, Any] = data
+
+        # Initialize the last accessed timestamp in an instance variable
+        self._last_accessed: Optional[datetime] = None
+
+        # Initialize the lock in an instance variable
+        self._lock: Final[threading.Lock] = threading.Lock()
+
+    def __contains__(
+        self,
+        key: str,
+    ) -> bool:
+        """
+        Check if the cache entry contains the given key.
+
+        Args:
+            key (str): The key to check for.
+
+        Returns:
+            bool: True if the cache entry contains the given key, False otherwise.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return True if the cache entry contains the given key, False otherwise
+            return key in self._data
+
+    def __eq__(
+        self,
+        other: Union[dict[str, Any], "PebbleCacheEntry"],
+    ) -> bool:
+        """
+        Check if the cache entry is equal to the other cache entry.
+
+        Args:
+            other (Union[dict[str, Any], PebbleCacheEntry): The other cache entry to compare to.
+
+        Returns:
+            bool: True if the cache entry is equal to the other cache entry, False otherwise.
+        """
+
+        # Check if the other object is a PebbleCacheEntry object
+        if not isinstance(
+            other,
+            (dict, PebbleCacheEntry),
+        ):
+            # Return False if the other object is not a PebbleCacheEntry object
+            return False
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Compare the data dicts
+            return self._data == other.data if isinstance(other, PebbleCacheEntry) else other
+
+    def __getitem__(
+        self,
+        key: str,
+    ) -> Any:
+        """
+        Get the value of the given key.
+
+        Args:
+            key (str): The key to get the value of.
+
+        Returns:
+            Any: The value of the given key.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the value of the given key
+            return self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        """
+        Return an iterator over the keys in the cache entry.
+
+        Returns:
+            Iterator[str]: An iterator over the keys in the cache entry.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return an iterator over the keys in the cache entry
+            return iter(self._data)
+
+    def __len__(self) -> int:
+        """
+        Return the number of items in the cache entry.
+
+        Returns:
+            int: The number of items in the cache entry.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the number of items in the cache entry
+            return len(self._data)
+
+    def __repr__(self) -> str:
+        """
+        Return the string representation of the object.
+
+        Returns:
+            str: The string representation of the object.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the string representation of the object
+            return f"<{self.__class__.__name__}(data={self._data}, dirty={self._dirty}, last_accessed={str(self._last_accessed)})>"
+
+    def __setitem__(
+        self,
+        key: str,
+        value: Any,
+    ) -> None:
+        """
+        Set the value of the given key.
+
+        Args:
+            key (str): The key to set the value of.
+            value (Any): The value to set.
+
+        Returns:
+            None
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Set the value of the given key
+            self._data[key] = value
+
+    def __str__(self) -> str:
+        """
+        Return the string representation of the object.
+
+        Returns:
+            str: The string representation of the object.
+        """
+
+        return self.__repr__()
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """
+        Get the data stored in the cache entry.
+
+        Returns:
+            dict[str, Any]: The data stored in the cache entry.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the data stored in the cache entry
+            return self._data
+
+    @property
+    def dirty(self) -> bool:
+        """
+        Get the dirty flag of the cache entry.
+
+        Returns:
+            bool: The dirty flag of the cache entry.
+        """
+
+        return self._dirty
+
+    @dirty.setter
+    def dirty(
+        self,
+        value: bool,
+    ) -> None:
+        """
+        Set the dirty flag of the cache entry.
+
+        Args:
+            value (bool): The dirty flag of the cache entry.
+
+        Returns:
+            None
+        """
+
+        self._dirty = value
+
+    @property
+    def last_accessed(self) -> Optional[datetime]:
+        """
+        Get the last accessed timestamp of the cache entry.
+
+        Returns:
+            Optional[datetime]: The last accessed timestamp of the cache entry.
+        """
+
+        return self._last_accessed
+
+    @last_accessed.setter
+    def last_accessed(
+        self,
+        value: datetime,
+    ) -> None:
+        """
+        Set the last accessed timestamp of the cache entry.
+
+        Args:
+            value (datetime): The last accessed timestamp of the cache entry.
+
+        Returns:
+            None
+        """
+
+        self._last_accessed = value
+
+    def clear(self) -> None:
+        """
+        Clear all data from the cache entry.
+
+        Returns:
+            None
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Clear the data
+            self._data.clear()
+
+        # Mark the cache entry as dirty
+        self.mark_as_dirty()
+
+    def copy(self) -> "PebbleCacheEntry":
+        """
+        Create a shallow copy of the cache entry.
+
+        Returns:
+            A new PebbleCacheEntry with the same data
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return a new PebbleCacheEntry with the same data
+            return PebbleCacheEntry(self._data.copy())
+
+    def get(
+        self,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+        """
+        Get the value for the given key, returning default if key is not found.
+
+        Args:
+            key: The key to look up
+            default: Default value if key is not found
+
+        Returns:
+            The value for the key or default if not found
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the value for the given key, returning default if key is not found
+            return self._data.get(key, default)
+
+    def is_dirty(self) -> bool:
+        """
+        Check if the cache entry is dirty.
+
+        Returns:
+            bool: True if the cache entry is dirty, False otherwise.
+        """
+
+        return self._dirty
+
+    def is_expired(
+        self,
+        time_to_live: int = 60,
+    ) -> bool:
+        """
+        Check if the cache entry is expired.
+
+        Args:
+            time_to_live (int): The time to live in seconds. Defaults to 60.
+
+        Returns:
+            bool: True if the cache entry is expired, False otherwise.
+        """
+
+        return is_stale(
+            interval=time_to_live,
+            timestamp=self._last_accessed,
+        )
+
+    def mark_as_clean(self) -> None:
+        """
+        Mark the cache entry as clean.
+
+        Returns:
+            None
+        """
+
+        self._dirty = False
+
+    def mark_as_dirty(self) -> None:
+        """
+        Mark the cache entry as dirty.
+
+        Returns:
+            None
+        """
+
+        self._dirty = True
+
+    def pop(
+        self,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+        """
+        Remove specified key and return the corresponding value.
+
+        Args:
+            key: Key to remove
+            default: Default value if key is not found
+
+        Returns:
+            The value for the key or default if not found
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Pop the key from the data
+            value: Any = self._data.pop(key, default)
+
+        # Mark the cache entry as dirty
+        self.mark_as_dirty()
+
+        # Return the value
+        return value
+
+    def size(self) -> int:
+        """
+        Return the size of the cache entry.
+
+        Returns:
+            int: The size of the cache entry.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the size of the cache entry
+            return len(self._data)
+
+    def update(
+        self,
+        other: Union[dict, "PebbleCacheEntry"],
+    ) -> None:
+        """
+        Update the cache entry with values from another dictionary or cache entry.
+
+        Args:
+            other: Dictionary or PebbleCacheEntry with values to update
+
+        Returns:
+            None
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Get the data from the other object
+            data: dict[str, Any] = other.data if isinstance(other, PebbleCacheEntry) else other
+
+            # Update the data
+            self._data.update(data)
+
+        # Mark the cache entry as dirty
+        self.mark_as_dirty()
+
+    def update_last_accessed(self) -> None:
+        """
+        Update the last accessed timestamp.
+
+        Returns:
+            None
+        """
+
+        # Update the last accessed timestamp
+        self._last_accessed = datetime.now()
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the cache entry to a dictionary.
+
+        Returns:
+            Dictionary representation of the cache entry
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the dictionary representation of the cache entry
+            return {
+                "data": self._data,
+                "dirty": self._dirty,
+                "last_accessed": self._last_accessed.isoformat() if self._last_accessed else None,
+            }
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+    ) -> "PebbleCacheEntry":
+        """
+        Create a PebbleCacheEntry from a dictionary.
+
+        Args:
+            data: Dictionary with 'data', 'dirty', and 'last_accessed' keys
+
+        Returns:
+            A new PebbleCacheEntry
+        """
+
+        # Create a new PebbleCacheEntry from the dictionary
+        entry: PebbleCacheEntry = cls(data["data"])
+
+        # Set the dirty flag
+        entry.dirty = data.get("dirty", False)
+
+        # Check if the last accessed timestamp is in the dictionary
+        if "last_accessed" in data and data["last_accessed"]:
+            # Set the last accessed timestamp
+            entry.last_accessed = datetime.fromisoformat(data["last_accessed"])
+
+        # Return the new PebbleCacheEntry
+        return entry
+
+
+class PebbleCache:
+    """
+    A class to represent a cache.
+    """
+
+    def __init__(
+        self,
+        cleanup_interval: int = 60,
+        max_size: Optional[int] = None,
+        time_to_live: int = 3600,
+    ) -> None:
+        """
+        Initialize a new PebbleCache object.
+
+        Args:
+            cleanup_interval (int): The cleanup interval.
+            max_size (Optional[int]): The max size.
+            time_to_live (int): The time to live.
+
+        Returns:
+            None
+        """
+
+        # Initialize the cache
+        self._cache: Final[dict[str, PebbleCacheEntry]] = {}
+
+        # Store the cleanup interval in an instance variable
+        self._cleanup_interval: Final[int] = cleanup_interval
+
+        # Store the max size in an instance variable
+        self._max_size: Final[Optional[int]] = max_size
+
+        # Store the last cleaned at timestamp in an instance variable
+        self._last_cleaned_at: Optional[datetime] = None
+
+        # Store the lock in an instance variable
+        self._lock: Final[threading.Lock] = threading.Lock()
+
+        # Store the time to live in an instance variable
+        self._time_to_live: Final[int] = time_to_live
+
+    def __contains__(
+        self,
+        key: str,
+    ) -> bool:
+        """
+        Check if the cache contains the given key.
+
+        Args:
+            key (str): The key to check.
+
+        Returns:
+            bool: True if the cache contains the key, False otherwise.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return True if the cache contains the key, False otherwise
+            return key in self._cache
+
+    def __eq__(
+        self,
+        other: "PebbleCache",
+    ) -> bool:
+        """
+        Check if the cache is equal to the other cache.
+
+        Args:
+            other (PebbleCache): The other cache to compare to.
+
+        Returns:
+            bool: True if the cache is equal to the other cache, False otherwise.
+        """
+
+        # Check if the other object is a PebbleCache object
+        if not isinstance(
+            other,
+            PebbleCache,
+        ):
+            # Return False if the other object is not a PebbleCache object
+            return False
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return True if the cache is equal to the other cache
+            return self._cache == other._cache
+
+    def __getitem__(
+        self,
+        key: str,
+    ) -> Any:
+        """
+        Get the entry with the given key.
+
+        Args:
+            key (str): The key of the entry to get.
+
+        Returns:
+            Any: The entry with the given key.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Get the entry
+            entry: PebbleCacheEntry = self._cache[key]
+
+            # Update the last accessed timestamp
+            entry.update_last_accessed()
+
+            # Return the data
+            return entry.data
+
+    def __len__(self) -> int:
+        """
+        Return the number of items in the cache.
+
+        Returns:
+            int: The number of items in the cache.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the number of items in the cache
+            return len(self._cache)
+
+    def __repr__(self) -> str:
+        """
+        Return the string representation of the cache.
+
+        Returns:
+            str: The string representation of the cache.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the string representation of the cache
+            return f"<{self.__class__.__name__}(cleanup_interval={self._cleanup_interval}, max_size={self._max_size}, time_to_live={self._time_to_live})"
+
+    def __setitem__(
+        self,
+        key: str,
+        value: Any,
+    ) -> None:
+        """
+        Set the entry with the given key.
+
+        Args:
+            key (str): The key of the entry to set.
+            value (Any): The value of the entry to set.
+
+        Returns:
+            None
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Maybe cleanup
+            self._maybe_cleanup()
+
+            # Maybe evict
+            self._maybe_evict()
+
+            # Get the entry
+            entry: Optional[PebbleCacheEntry] = self._cache.get(key, None)
+
+            # Check if the entry is not None
+            if not entry:
+                # Create a new entry
+                entry = (
+                    PebbleCacheEntry(value)
+                    if not isinstance(
+                        value,
+                        PebbleCacheEntry,
+                    )
+                    else value
+                )
+
+                # Set the entry
+                self._cache[key] = entry
+
+            else:
+                # Update the entry
+                entry.update(other=value)
+
+            # Update the last accessed timestamp
+            entry.update_last_accessed()
+
+    def __str__(self) -> str:
+        """
+        Return the string representation of the cache.
+
+        Returns:
+            str: The string representation of the cache.
+        """
+
+        return self.__repr__()
+
+    @property
+    def cache(self) -> dict[str, PebbleCacheEntry]:
+        """
+        Return the cache.
+
+        Returns:
+            dict[str, PebbleCacheEntry]: The cache.
+        """
+
+        return dict(self._cache)
+
+    @property
+    def cleanup_interval(self) -> int:
+        """
+        Return the cleanup interval.
+
+        Returns:
+            int: The cleanup interval.
+        """
+
+        return self._cleanup_interval
+
+    @property
+    def last_cleaned_at(self) -> Optional[datetime]:
+        """
+        Return the last cleaned at timestamp.
+
+        Returns:
+            Optional[datetime]: The last cleaned at timestamp.
+        """
+
+        return self._last_cleaned_at
+
+    @last_cleaned_at.setter
+    def last_cleaned_at(
+        self,
+        value: datetime,
+    ) -> None:
+        """
+        Set the last cleaned at timestamp.
+
+        Args:
+            value (datetime): The last cleaned at timestamp.
+        """
+
+        self._last_cleaned_at = value
+
+    @property
+    def max_size(self) -> Optional[int]:
+        """
+        Return the max size.
+
+        Returns:
+            Optional[int]: The max size.
+        """
+
+        return self._max_size
+
+    @property
+    def time_to_live(self) -> int:
+        """
+        Return the time to live.
+
+        Returns:
+            int: The time to live.
+        """
+
+        return self._time_to_live
+
+    def _is_expired(
+        self,
+        key: str,
+    ) -> bool:
+        """ """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Obtain the entry
+            entry: Optional[PebbleCacheEntry] = self._cache.get(key, None)
+
+            # Check if the entry is not None
+            if entry is None:
+                # Return False if the entry is not found
+                return False
+
+            # Return True if the entry is expired, False otherwise
+            return entry.is_expired(time_to_live=self._time_to_live)
+
+    def _maybe_cleanup(self) -> None:
+        """
+        Clean up the cache if it is stale.
+
+        Returns:
+            None
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Check if the cache is empty
+            if self.is_empty():
+                # Return if the cache is empty
+                return
+
+            # Get the expired keys
+            expired_keys: list[str] = [key for key in self._cache if self._is_expired(key=key)]
+
+            # Check if the cache is stale
+            if is_stale(
+                interval=self._cleanup_interval,
+                timestamp=self._last_cleaned_at,
+            ):
+                # Clean up the cache
+                self._cleanup()
+
+            for key in expired_keys:
+                # Remove the expired key
+                self._cache.pop(key)
+
+            # Update the last cleaned at timestamp
+            self._last_cleaned_at = datetime.now()
+
+    def _maybe_evict(self) -> None:
+        """
+        Evict the cache if it is full.
+
+        Returns:
+            None
+        """
+
+        # Check if the cache is not full
+        if not self.is_full():
+            # Return if the cache is not full
+            return
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Get all entries, oldest first
+            entries: list[tuple[str, PebbleCacheEntry]] = sorted(
+                self._cache.items(),
+                key=lambda x: x[1].last_accessed or datetime.min,
+            )
+
+            # Iterate over the entries
+            for key, _ in entries[: len(entries) - self._max_size + 1]:
+                # Remove the oldest entry
+                self._cache.pop(key)
+
+    def add(
+        self,
+        key: str,
+        value: dict[str, Any],
+    ) -> None:
+        """
+        Add a new entry to the cache.
+
+        Args:
+            key (str): The key of the entry to add.
+            value (dict[str, Any]): The value of the entry to add.
+
+        Returns:
+            None
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Check if the key already exists
+            if self._cache.get(
+                key,
+                None,
+            ):
+                # Update the entry
+                self._cache[key].update(other=value)
+
+                # Return early
+                return
+
+            # Add the key
+            self._cache[key] = PebbleCacheEntry(value)
+
+    def clear(self) -> None:
+        """
+        Clear the cache.
+
+        Returns:
+            None
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Clear the cache
+            self._cache.clear()
+
+    def delete(
+        self,
+        key: str,
+    ) -> None:
+        """
+        Delete the entry with the given key.
+
+        Args:
+            key (str): The key of the entry to delete.
+
+        Returns:
+            None
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Delete the entry
+            self._cache.pop(
+                key,
+                None,
+            )
+
+    def flush_dirty(self) -> dict[str, PebbleCacheEntry]:
+        """
+        Flush the dirty entries.
+
+        Returns:
+            dict[str, PebbleCacheEntry]: The dirty entries.
+        """
+
+        # Declare the result
+        result: dict[str, PebbleCacheEntry] = {}
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Iterate over the cache
+            for key, value in self._cache.items():
+                # Check if the entry is dirty
+                if value.is_dirty():
+                    # Add the entry to the result
+                    result[key] = value
+
+        # Return the result
+        return result
+
+    def get(
+        self,
+        key: str,
+    ) -> Optional[PebbleCacheEntry]:
+        """
+        Get the entry with the given key.
+
+        Args:
+            key (str): The key of the entry to get.
+
+        Returns:
+            Optional[PebbleCacheEntry]: The entry with the given key.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the entry with the given key
+            return self._cache.get(
+                key,
+                None,
+            )
+
+    def is_empty(self) -> bool:
+        """
+        Check if the cache is empty.
+
+        Returns:
+            bool: True if the cache is empty, False otherwise.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return True if the cache is empty, False otherwise
+            return not self._cache
+
+    def is_full(self) -> bool:
+        """
+        Check if the cache is full.
+
+        Returns:
+            bool: True if the cache is full, False otherwise.
+        """
+
+        # Check if the max size is None
+        if self._max_size is None:
+            # Return False if the max size is None
+            return False
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return True if the cache is full, False otherwise
+            return len(self._cache) >= self._max_size
+
+    def items(self) -> list[tuple[str, PebbleCacheEntry]]:
+        """
+        Return the items of the cache.
+
+        Returns:
+            list[tuple[str, PebbleCacheEntry]]: The items of the cache.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the items of the cache
+            return [
+                (
+                    key,
+                    value,
+                )
+                for (
+                    key,
+                    value,
+                ) in self._cache.items()
+                if not self._is_expired(key=key)
+            ]
+
+    def keys(self) -> list[str]:
+        """
+        Return the keys of the cache.
+
+        Returns:
+            list[str]: The keys of the cache.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the keys of the cache
+            return [key for key in self._cache.keys() if not self._is_expired(key=key)]
+
+    def set(
+        self,
+        key: str,
+        value: PebbleCacheEntry,
+    ) -> None:
+        """
+        Set the entry with the given key.
+
+        Args:
+            key (str): The key of the entry to set.
+            value (Any): The value of the entry to set.
+
+        Returns:
+            None
+        """
+
+        # Check if the value is a PebbleCacheEntry
+        if not isinstance(
+            value,
+            PebbleCacheEntry,
+        ):
+            # Raise a TypeError if the value is not a PebbleCacheEntry
+            raise TypeError("value must be a PebbleCacheEntry object.")
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Set the entry
+            self._cache[key] = value
+
+    def size(self) -> int:
+        """
+        Return the size of the cache.
+
+        Returns:
+            int: The size of the cache.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the size of the cache
+            return len(self._cache)
+
+    def update_last_cleaned_at(self) -> None:
+        """
+        Update the last cleaned at time.
+
+        Returns:
+            None
+        """
+
+        # Update the last cleaned at time
+        self._last_cleaned_at = datetime.now()
+
+    def values(self) -> list[PebbleCacheEntry]:
+        """
+        Return the values of the cache.
+
+        Returns:
+            list[PebbleCacheEntry]: The values of the cache.
+        """
+
+        # Acquire a lock to ensure thread safety
+        with self._lock:
+            # Return the values of the cache
+            return [
+                value
+                for (
+                    key,
+                    value,
+                ) in self._cache.items()
+                if not self._is_expired(key=key)
+            ]
 
 
 class PebbleField:
@@ -372,9 +1434,7 @@ class PebbleField:
         # Check if the passed value is not the default
         elif self._default is not None and value != self._default:
             # Raise a PebbleFieldValidationError if the value is not the default
-            raise PebbleFieldValidationError(
-                f"The field {self._name} must be {self._default}."
-            )
+            raise PebbleFieldValidationError(f"The field {self._name} must be {self._default}.")
 
         # Return True if the value is valid
         return True
@@ -1730,6 +2790,7 @@ class PebbleTable:
         definition: Optional[dict[str, Any]] = None,
         entries: Optional[dict[str, Any]] = None,
         fields: Optional[dict[str, Any]] = None,
+        flush_interval: int = 300,
         identifier: Optional[str] = None,
         indexes: Optional[dict[str, Any]] = None,
         primary_key: Optional[dict[str, Any]] = None,
@@ -1745,6 +2806,7 @@ class PebbleTable:
             definition: The dictionary to store the definition of the table.
             entries: The dictionary to store the table data in.
             fields: The dictionary to store the fields of the table.
+            flush_interval: The flush interval in seconds.
             identifier: The identifier of the table.
             indexes: The dictionary to store the indexes of the table.
             name: The name of the table.
@@ -1773,6 +2835,9 @@ class PebbleTable:
         # Store the passed definition in an instance variable
         self._definition: dict[str, Any] = definition
 
+        # Initialize the dirty flag as an instance variable
+        self._dirty: bool = False
+
         # Check if the entries is None
         if entries is None:
             # Initialize an empty entries
@@ -1792,6 +2857,12 @@ class PebbleTable:
         # Store the passed fields in an instance variable
         self._fields: dict[str, Any] = fields
 
+        # Store the passed flush interval in an instance variable
+        self._flush_interval: Final[int] = flush_interval
+
+        # Initialize the flush thread as an instance variable
+        self._flush_thread: Final[threading.Thread] = threading.Thread(target=self._auto_flush)
+
         # Check if the identifier is None
         if identifier is None:
             # Initialize an empty identifier
@@ -1807,6 +2878,9 @@ class PebbleTable:
 
         # Store the passed indexes in an instance variable
         self._indexes: dict[str, Any] = indexes
+
+        # Initialize the last flushed at as an instance variable
+        self._last_flushed_at: Optional[datetime] = None
 
         # Store the passed name string in an instance variable
         self._name: str = name
@@ -1846,6 +2920,12 @@ class PebbleTable:
         # Store the passed unique in an instance variable
         self._unique: dict[str, Any] = unique
 
+        # Start the flush thread
+        self._flush_thread.start()
+
+        # Register the flush method to be called on exit
+        atexit.register(self._flush)
+
     @property
     def constraints(self) -> dict[str, Any]:
         """
@@ -1876,6 +2956,34 @@ class PebbleTable:
         }
 
     @property
+    def dirty(self) -> bool:
+        """
+        Get the dirty flag of the table.
+
+        Returns:
+            bool: The dirty flag of the table.
+        """
+
+        return self._dirty
+
+    @dirty.setter
+    def dirty(
+        self,
+        value: bool,
+    ) -> None:
+        """
+        Set the dirty flag of the table.
+
+        Args:
+            value: The dirty flag of the table.
+
+        Returns:
+            None
+        """
+
+        self._dirty = value
+
+    @property
     def entries(self) -> dict[str, Any]:
         """
         Get the entries of the table.
@@ -1898,6 +3006,17 @@ class PebbleTable:
         return dict(self._fields)
 
     @property
+    def flush_interval(self) -> int:
+        """
+        Get the flush interval of the table.
+
+        Returns:
+            int: The flush interval of the table.
+        """
+
+        return self._flush_interval
+
+    @property
     def identifier(self) -> str:
         """
         Get the identifier of the table.
@@ -1918,6 +3037,34 @@ class PebbleTable:
         """
 
         return dict(self._indexes)
+
+    @property
+    def last_flushed_at(self) -> Optional[datetime]:
+        """
+        Get the last flushed at of the table.
+
+        Returns:
+            Optional[datetime]: The last flushed at of the table.
+        """
+
+        return self._last_flushed_at
+
+    @last_flushed_at.setter
+    def last_flushed_at(
+        self,
+        value: Optional[datetime],
+    ) -> None:
+        """
+        Set the last flushed at of the table.
+
+        Args:
+            value: The last flushed at of the table.
+
+        Returns:
+            None
+        """
+
+        self._last_flushed_at = value
 
     @property
     def name(self) -> str:
@@ -2119,11 +3266,47 @@ class PebbleTable:
         # Set the value in the dictionary
         self._entries[key] = value
 
+    def _auto_flush(self) -> None:
+        """
+        Auto flush the table.
+
+        This method will auto flush the table at a regular interval.
+        It will do so in a separate thread.
+
+        Returns:
+            None
+        """
+
+        # Run in an infinite loop
+        while True:
+            # Wait for the flush interval
+            time.sleep(self._flush_interval)
+
+            # Flush the table
+            self._flush()
+
+    def _flush(self) -> None:
+        """
+        Flush the table.
+
+        This method will flush the table if it is stale.
+
+        Returns:
+            None
+        """
+
+        # Check if the table is stale
+        if not is_stale(interval=self._flush_interval, timestamp=self._last_flushed_at):
+            # Return if the table is not stale
+            return
+
+        # Commit the table
+        self.commit()
+
     def all(
-        self, format: Literal["dict", "list", "set", "tuple"] = "dict"
-    ) -> Union[
-        dict[str, Any], list[dict[str, Any]], set[dict[str, Any]], tuple[dict[str, Any]]
-    ]:
+        self,
+        format: Literal["dict", "list", "set", "tuple"] = "dict",
+    ) -> Union[dict[str, Any], list[dict[str, Any]], set[dict[str, Any]], tuple[dict[str, Any]]]:
         """
         Get all the data in the table.
 
@@ -2209,6 +3392,12 @@ class PebbleTable:
             data=dict_to_json(dictionary=self.to_dict()),
         )
 
+        # Mark the table as clean
+        self.mark_as_clean()
+
+        # Update the last flushed at
+        self._last_flushed_at = datetime.now()
+
     def configure(
         self,
         path: str,
@@ -2242,6 +3431,9 @@ class PebbleTable:
 
         # Update the table object
         self.__dict__.update(builder.build().to_dict())
+
+        # Mark the table as dirty
+        self.mark_as_dirty()
 
     def delete(self) -> None:
         """
@@ -2385,6 +3577,28 @@ class PebbleTable:
         # Return the size of the table
         return self._entries["total"]
 
+    def mark_as_clean(self) -> None:
+        """
+        Mark the table as clean.
+
+        Returns:
+            None
+        """
+
+        # Set the dirty flag to False
+        self._dirty = False
+
+    def mark_as_dirty(self) -> None:
+        """
+        Mark the table as dirty.
+
+        Returns:
+            None
+        """
+
+        # Set the dirty flag to True
+        self._dirty = True
+
     def remove(
         self,
         identifier: Union[int, str],
@@ -2414,6 +3628,9 @@ class PebbleTable:
 
         # Delete the identifier
         self._entries["values"].pop(identifier)
+
+        # Mark the table as dirty
+        self.mark_as_dirty()
 
         # Return True if the identifier was deleted
         return True
@@ -2454,6 +3671,9 @@ class PebbleTable:
 
         # Set the entry in the dictionary
         self._entries["values"][identifier] = entry
+
+        # Mark the table as dirty
+        self.mark_as_dirty()
 
         # Return the identifier of the entry
         return identifier
@@ -3324,9 +4544,7 @@ class PebbleQueryString:
             list[list[str]]: The list representation of the string.
         """
 
-        return [
-            filter.to_list() for filter in [filter for filter in self._filters.values()]
-        ]
+        return [filter.to_list() for filter in [filter for filter in self._filters.values()]]
 
     def to_str(self) -> str:
         """
@@ -3346,10 +4564,7 @@ class PebbleQueryString:
             tuple[tuple[str]]: The tuple representation of the string.
         """
 
-        return tuple(
-            filter.to_tuple()
-            for filter in [filter for filter in self._filters.values()]
-        )
+        return tuple(filter.to_tuple() for filter in [filter for filter in self._filters.values()])
 
 
 class PebbleQueryEngine:
@@ -3483,33 +4698,33 @@ class PebbleDatabase:
     def __init__(
         self,
         name: str,
-        tables: Optional[dict[str, Any]] = None,
+        flush_interval: int = 300,
         identifier: Optional[str] = None,
+        tables: Optional[dict[str, Any]] = None,
         path: Optional[Union[Path, str]] = None,
     ) -> None:
         """
         Initialize a new PebbleTable object.
 
         Args:
-            name (str): The name of the table.
-            tables (dict[str, Any]): The dictionary to store the table data in.
+            flush_interval (int): The flush interval in seconds.
             identifier (str): The identifier of the table.
+            name (str): The name of the table.
             path (Union[Path, str]): The path to the table file.
+            tables (dict[str, Any]): The dictionary to store the table data in.
 
         Returns:
             None
         """
 
-        # Check if the tables is None
-        if tables is None:
-            # Initialize an empty dictionary
-            tables = {
-                "total": 0,
-                "values": {},
-            }
+        # Initialize the dirty flag as an instance variable
+        self._dirty: bool = False
 
-        # Store the passed dictionary in an instance variable
-        self._tables: dict[str, Any] = tables
+        # Store the passed flush interval in an instance variable
+        self._flush_interval: Final[int] = flush_interval
+
+        # Initialize the flush thread as an instance variable
+        self._flush_thread: Final[threading.Thread] = threading.Thread(target=self._auto_flush)
 
         # Check if the identifier is None
         if identifier is None:
@@ -3518,6 +4733,9 @@ class PebbleDatabase:
 
         # Store the passed identifier in an instance variable
         self._identifier: Final[str] = identifier
+
+        # Initialize the last flushed at as an instance variable
+        self._last_flushed_at: Optional[datetime] = None
 
         # Store the passed name string in an instance variable
         self._name: str = name
@@ -3533,6 +4751,62 @@ class PebbleDatabase:
         # Store the passed path in an instance variable
         self._path: Path = path
 
+        # Check if the tables is None
+        if tables is None:
+            # Initialize an empty dictionary
+            tables = {
+                "total": 0,
+                "values": {},
+            }
+
+        # Store the passed dictionary in an instance variable
+        self._tables: dict[str, Any] = tables
+
+        # Start the flush thread
+        self._flush_thread.start()
+
+        # Register the flush method to be called on exit
+        atexit.register(self._flush)
+
+    @property
+    def dirty(self) -> bool:
+        """
+        Get the dirty flag of the database.
+
+        Returns:
+            bool: The dirty flag of the database.
+        """
+
+        return self._dirty
+
+    @dirty.setter
+    def dirty(
+        self,
+        value: bool,
+    ) -> None:
+        """
+        Set the dirty flag of the database.
+
+        Args:
+            value: The dirty flag of the database.
+
+        Returns:
+            None
+        """
+
+        self._dirty = value
+
+    @property
+    def flush_interval(self) -> int:
+        """
+        Get the flush interval of the database.
+
+        Returns:
+            int: The flush interval of the database.
+        """
+
+        return self._flush_interval
+
     @property
     def identifier(self) -> str:
         """
@@ -3543,6 +4817,34 @@ class PebbleDatabase:
         """
 
         return self._identifier
+
+    @property
+    def last_flushed_at(self) -> Optional[datetime]:
+        """
+        Get the last flushed at of the database.
+
+        Returns:
+            Optional[datetime]: The last flushed at of the database.
+        """
+
+        return self._last_flushed_at
+
+    @last_flushed_at.setter
+    def last_flushed_at(
+        self,
+        value: Optional[datetime],
+    ) -> None:
+        """
+        Set the last flushed at of the database.
+
+        Args:
+            value: The last flushed at of the database.
+
+        Returns:
+            None
+        """
+
+        self._last_flushed_at = value
 
     @property
     def name(self) -> str:
@@ -3721,6 +5023,43 @@ class PebbleDatabase:
         # Set the value in the dictionary
         self._tables[key] = value
 
+    def _auto_flush(self) -> None:
+        """
+        Auto flush the database.
+
+        This method will auto flush the database at a regular interval.
+        It will do so in a separate thread.
+
+        Returns:
+            None
+        """
+
+        # Run in an infinite loop
+        while True:
+            # Wait for the flush interval
+            time.sleep(self._flush_interval)
+
+            # Flush the database
+            self._flush()
+
+    def _flush(self) -> None:
+        """
+        Flush the database.
+
+        This method will flush the database if it is stale.
+
+        Returns:
+            None
+        """
+
+        # Check if the database is stale
+        if not is_stale(interval=self._flush_interval, timestamp=self._last_flushed_at):
+            # Return if the database is not stale
+            return
+
+        # Commit the database
+        self.commit()
+
     def add_table(
         self,
         table: PebbleTable,
@@ -3764,6 +5103,9 @@ class PebbleDatabase:
             "name": table.name,
             "path": table.path,
         }
+
+        # Mark the database as dirty
+        self.mark_as_dirty()
 
     def all(self) -> dict[str, Any]:
         """
@@ -3819,6 +5161,12 @@ class PebbleDatabase:
             data=dict_to_json(dictionary=self.to_dict()),
         )
 
+        # Mark the database as clean
+        self.mark_as_clean()
+
+        # Update the last flushed at
+        self._last_flushed_at = datetime.now()
+
     def configure(
         self,
         path: str,
@@ -3852,6 +5200,9 @@ class PebbleDatabase:
 
         # Update the table object
         self.__dict__.update(builder.build().to_dict())
+
+        # Mark the database as dirty
+        self.mark_as_dirty()
 
     def delete(self) -> None:
         """
@@ -3959,6 +5310,28 @@ class PebbleDatabase:
         # Return the size of the database
         return self._tables["total"]
 
+    def mark_as_clean(self) -> None:
+        """
+        Mark the database as clean.
+
+        Returns:
+            None
+        """
+
+        # Set the dirty flag to False
+        self._dirty = False
+
+    def mark_as_dirty(self) -> None:
+        """
+        Mark the database as dirty.
+
+        Returns:
+            None
+        """
+
+        # Set the dirty flag to True
+        self._dirty = True
+
     def remove_table(
         self,
         table: PebbleTable,
@@ -3999,6 +5372,9 @@ class PebbleDatabase:
 
             # Break the loop
             break
+
+        # Mark the database as dirty
+        self.mark_as_dirty()
 
     def table(
         self,
@@ -4046,6 +5422,9 @@ class PebbleDatabase:
 
         # Add the table to the database
         self.add_table(table=table)
+
+        # Mark the database as dirty
+        self.mark_as_dirty()
 
         # Return the table
         return table
@@ -4801,9 +6180,7 @@ class PebbleToolBuilder:
             Self: The PebbleToolBuilder instance.
         """
 
-        raise NotImplementedError(
-            f"{self.__class__.__name__}.query() is not implemented yet."
-        )
+        raise NotImplementedError(f"{self.__class__.__name__}.query() is not implemented yet.")
 
     def set(
         self,
@@ -5025,6 +6402,30 @@ class Pebble:
 
         # Return the database
         return database
+
+    @classmethod
+    def get_database_builder() -> PebbleDatabaseBuilder:
+        """
+        Get a new database builder.
+
+        Returns:
+            PebbleDatabaseBuilder: The database builder.
+        """
+
+        # Return a new database builder
+        return PebbleDatabaseBuilder()
+
+    @classmethod
+    def get_table_builder() -> PebbleTableBuilder:
+        """
+        Get a new table builder.
+
+        Returns:
+            PebbleTableBuilder: The table builder.
+        """
+
+        # Return a new table builder
+        return PebbleTableBuilder()
 
     def get_or_create_database(
         self,

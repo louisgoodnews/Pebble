@@ -42,6 +42,7 @@ __all__: Final[List[str]] = [
     "is_list",
     "is_path",
     "is_set",
+    "is_stale",
     "is_time",
     "is_tuple",
     "is_uuid",
@@ -729,6 +730,28 @@ def is_set(string: str) -> bool:
     except ValueError:
         # Return False if the string is not a set
         return False
+
+
+def is_stale(
+    interval: int,
+    timestamp: datetime,
+) -> bool:
+    """
+    Check if a timestamp is stale.
+
+    Args:
+        interval (int): The interval in seconds.
+        timestamp (datetime): The timestamp to check.
+
+    Returns:
+        bool: True if the timestamp is stale, False otherwise.
+    """
+
+    # Get the current time
+    now: datetime = datetime.now()
+
+    # Return True if the timestamp is stale
+    return (now - timestamp).total_seconds() > interval
 
 
 def is_time(string: str) -> bool:
