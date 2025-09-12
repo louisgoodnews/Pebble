@@ -1437,6 +1437,7 @@ class PebbleField:
         elif self._default is not None and value != self._default:
             # Raise a PebbleFieldValidationError if the value is not the default
             raise PebbleFieldValidationError(f"The field {self._name} must be {self._default}.")
+            raise PebbleFieldValidationError(f"The field {self._name} must be {self._default}.")
 
         # Return True if the value is valid
         return True
@@ -3084,24 +3085,11 @@ class PebbleTable:
         Initialize a new PebbleTable object.
 
         Args:
-<<<<<<< HEAD
-            constraints: The dictionary to store the constraints of the table.
-            definition: The dictionary to store the definition of the table.
-            entries: The dictionary to store the table data in.
-            fields: The dictionary to store the fields of the table.
-            flush_interval: The flush interval in seconds.
-            identifier: The identifier of the table.
-            indexes: The dictionary to store the indexes of the table.
-            name: The name of the table.
-            path: The path to the table file.
-            primary_key: The dictionary to store the primary key of the table.
-            references: The dictionary to store the references of the table.
-            unique: The dictionary to store the unique constraints of the table.
-=======
             constraints (Optional[dict[str, Any]]): The dictionary to store the constraints of the table.
             definition (Optional[dict[str, Any]]): The dictionary to store the definition of the table.
             entries (Optional[dict[str, Any]]): The dictionary to store the table data in.
             fields (Optional[dict[str, Any]]): The dictionary to store the fields of the table.
+            flush_interval (int): The flush interval in seconds.
             identifier (Optional[str]): The identifier of the table.
             indexes (Optional[list[str]]): The list to store the indexes of the table.
             name (str): The name of the table.
@@ -3110,7 +3098,6 @@ class PebbleTable:
             references (Optional[dict[str, Any]]): The dictionary to store the references of the table.
             required (Optional[list[str]]): The list of required fields.
             unique (Optional[list[str]]): The list of unique fields.
->>>>>>> 86e247d9613216c89211af56a2c5d27870dc234a
 
         Returns:
             None
@@ -3140,13 +3127,11 @@ class PebbleTable:
         # Store the passed definition in an instance variable
         self._definition: dict[str, Any] = definition
 
-<<<<<<< HEAD
         # Initialize the dirty flag as an instance variable
         self._dirty: bool = False
-=======
+
         # Store the passed engine in an instance variable
         self._engine: Optional[PebbleFilterEngine] = None
->>>>>>> 86e247d9613216c89211af56a2c5d27870dc234a
 
         # Check if the entries is None
         if entries is None:
@@ -3656,12 +3641,13 @@ class PebbleTable:
         self.commit()
 
     def all(
-<<<<<<< HEAD
         self,
-        format: Literal["dict", "list", "set", "tuple"] = "dict",
-=======
-        self, format: Literal["dict", "list", "set", "tuple"] = "dict"
->>>>>>> 86e247d9613216c89211af56a2c5d27870dc234a
+        format: Literal[
+            "dict",
+            "list",
+            "set",
+            "tuple",
+        ] = "dict",
     ) -> Union[dict[str, Any], list[dict[str, Any]], set[dict[str, Any]], tuple[dict[str, Any]]]:
         """
         Get all the data in the table.
@@ -5388,19 +5374,17 @@ class PebbleDatabase:
             None
         """
 
-<<<<<<< HEAD
         # Initialize the dirty flag as an instance variable
         self._dirty: bool = False
+
+        # Initialize a new PebbleQueryEngine object
+        self._engine: Optional[PebbleQueryEngine] = None
 
         # Store the passed flush interval in an instance variable
         self._flush_interval: Final[int] = flush_interval
 
         # Initialize the flush thread as an instance variable
         self._flush_thread: Final[threading.Thread] = threading.Thread(target=self._auto_flush)
-=======
-        # Initialize a new PebbleQueryEngine object
-        self._engine: Optional[PebbleQueryEngine] = None
->>>>>>> 86e247d9613216c89211af56a2c5d27870dc234a
 
         # Check if the identifier is None
         if identifier is None:
@@ -5438,7 +5422,6 @@ class PebbleDatabase:
         # Store the passed dictionary in an instance variable
         self._tables: dict[str, Any] = tables
 
-<<<<<<< HEAD
         # Start the flush thread
         self._flush_thread.start()
 
@@ -5484,8 +5467,6 @@ class PebbleDatabase:
 
         return self._flush_interval
 
-=======
->>>>>>> 86e247d9613216c89211af56a2c5d27870dc234a
     @property
     def identifier(self) -> str:
         """
@@ -6005,7 +5986,6 @@ class PebbleDatabase:
         # Return the size of the database
         return self._tables["total"]
 
-<<<<<<< HEAD
     def mark_as_clean(self) -> None:
         """
         Mark the database as clean.
@@ -6027,7 +6007,7 @@ class PebbleDatabase:
 
         # Set the dirty flag to True
         self._dirty = True
-=======
+
     def query(self) -> dict[str, Any]:
         """
         Return the query.
@@ -6046,7 +6026,6 @@ class PebbleDatabase:
 
         # Return the query
         return self._engine.query()
->>>>>>> 86e247d9613216c89211af56a2c5d27870dc234a
 
     def remove_table(
         self,
@@ -6089,10 +6068,9 @@ class PebbleDatabase:
             # Break the loop
             break
 
-<<<<<<< HEAD
         # Mark the database as dirty
         self.mark_as_dirty()
-=======
+
     def set_query(
         self,
         string: str,
@@ -6162,7 +6140,6 @@ class PebbleDatabase:
 
         # Return the database object
         return self
->>>>>>> 86e247d9613216c89211af56a2c5d27870dc234a
 
     def table(
         self,
