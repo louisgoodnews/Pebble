@@ -48,7 +48,7 @@ from utils.constants import (
     TUPLE,
     UUID,
 )
-from utils.exceptions import (
+from core.exceptions import (
     PebbleError,
     PebbleFieldValidationError,
     PebbleFileNotCreatedError,

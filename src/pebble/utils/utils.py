@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Final, List, Optional, Union
 from uuid import UUID
 
-from utils.exceptions import (
+from core.exceptions import (
     PebbleFileNotCreatedError,
     PebbleFileNotDeletedError,
     PebbleFileNotFoundException,
